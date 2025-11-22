@@ -16,6 +16,12 @@ class App:
             "RGB", (MAP_WIDTH, MAP_HEIGHT), "white")
         self.tk_map_image = None
 
+        # Robot state
+        self.robot_x = MAP_WIDTH // 2
+        self.robot_y = MAP_HEIGHT // 2
+        self.robot_radius = 5
+        self.robot_speed = 5
+
         # Configure styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
@@ -24,6 +30,16 @@ class App:
         self.create_toolbar()
         self.create_left_panel()
         self.create_right_panel()
+
+        # Bind keyboard controls
+        self.root.bind(
+            '<KeyPress-w>', lambda e: self.move_robot(0, -self.robot_speed))
+        self.root.bind(
+            '<KeyPress-a>', lambda e: self.move_robot(-self.robot_speed, 0))
+        self.root.bind(
+            '<KeyPress-s>', lambda e: self.move_robot(0, self.robot_speed))
+        self.root.bind(
+            '<KeyPress-d>', lambda e: self.move_robot(self.robot_speed, 0))
 
     def create_layout(self):
         # Main container
@@ -137,6 +153,33 @@ class App:
         self.map_canvas.delete("all")
         self.map_canvas.create_image(
             0, 0, image=self.tk_map_image, anchor="nw")
+        self.draw_robot()
+
+    def draw_robot(self):
+        # Draw robot as a blue circle
+        self.map_canvas.create_oval(
+            self.robot_x - self.robot_radius,
+            self.robot_y - self.robot_radius,
+            self.robot_x + self.robot_radius,
+            self.robot_y + self.robot_radius,
+            fill=COLOR_ROBOT_GT,
+            outline=COLOR_ROBOT_GT,
+            tags="robot"
+        )
+
+    def move_robot(self, dx, dy):
+        # Update robot position
+        self.robot_x += dx
+        self.robot_y += dy
+
+        # Keep robot within bounds
+        self.robot_x = max(self.robot_radius, min(
+            MAP_WIDTH - self.robot_radius, self.robot_x))
+        self.robot_y = max(self.robot_radius, min(
+            MAP_HEIGHT - self.robot_radius, self.robot_y))
+
+        # Redraw the map with the robot at new position
+        self.update_map_display()
 
     def run(self):
         self.update_map_display()
