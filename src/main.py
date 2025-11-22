@@ -31,7 +31,7 @@ class App:
         self.robot_angle = 0
         self.robot_rotation_speed = 7.5  # Degrees per key press
         self.cone_length = 40  # Length of the viewing cone
-        self.cone_angle = 90  # Cone angle in degrees
+        self.cone_angle = 120  # Cone angle in degrees
 
         # Camera parameters
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
@@ -409,12 +409,16 @@ class App:
         """
         Capture a 1D strip of pixels from what the robot sees.
         Samples pixels along rays cast from the robot's viewing direction.
+        Walls appear less opaque (more white) the further they are from the robot.
         """
         half_cone = self.cone_angle / 2
         pixels = self.current_map_image.load()
 
         # Create a list to store RGB values for each sample
         camera_strip = []
+
+        # Maximum distance for opacity calculation (cone length)
+        max_distance = self.cone_length
 
         # Sample pixels across the cone angle
         for i in range(self.camera_samples):
@@ -440,7 +444,21 @@ class App:
 
             # Get the RGB color at this point
             color = pixels[pixel_x, pixel_y]
-            camera_strip.append(color)
+
+            # Calculate opacity based on distance
+            # Closer = more opaque (opacity = 1.0), further = less opaque (opacity approaches 0.0)
+            # Use exponential decay for more natural distance perception
+            opacity = math.exp(-distance / max_distance * 0.1)
+
+            # Blend the color with white based on opacity
+            # opacity = 1.0 -> full color, opacity = 0.0 -> white
+            blended_color = (
+                int(color[0] * opacity + 255 * (1 - opacity)),
+                int(color[1] * opacity + 255 * (1 - opacity)),
+                int(color[2] * opacity + 255 * (1 - opacity))
+            )
+
+            camera_strip.append(blended_color)
 
         # Store as PIL Image (1D image with height=1)
         self.current_camera_view = Image.new('RGB', (self.camera_samples, 1))
