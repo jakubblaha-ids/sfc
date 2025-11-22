@@ -147,23 +147,15 @@ class App:
             side=tk.TOP, fill=tk.BOTH, expand=True, padx=PANEL_PADDING,
             pady=PANEL_PADDING)
 
-        # Progress bar area at the bottom
-        self.progress_frame = ttk.Frame(self.main_container)
-        self.progress_frame.pack(
+        # Status label area at the bottom
+        self.status_frame = ttk.Frame(self.main_container)
+        self.status_frame.pack(
             side=tk.BOTTOM, fill=tk.X, padx=PANEL_PADDING,
             pady=(0, PANEL_PADDING))
 
-        self.progress_label = ttk.Label(
-            self.progress_frame, text="", anchor="w")
-        self.progress_label.pack(side=tk.LEFT, padx=(0, 10))
-
-        self.progress_bar = ttk.Progressbar(
-            self.progress_frame,
-            orient=tk.HORIZONTAL,
-            mode='determinate',
-            length=400
-        )
-        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.status_label = ttk.Label(
+            self.status_frame, text="", anchor="w")
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def create_toolbar(self):
         buttons = {
@@ -225,7 +217,7 @@ class App:
         input_frame.pack(fill=tk.X, padx=10, pady=10)
 
         self.input_canvas = tk.Canvas(
-            input_frame, height=100, highlightthickness=0, bg="#f0f0f0")
+            input_frame, height=50, highlightthickness=0, bg="#f0f0f0")
         self.input_canvas.pack(fill=tk.X, pady=(5, 0))
 
         # 2. Retrieved Memory
@@ -234,7 +226,7 @@ class App:
         memory_frame.pack(fill=tk.X, padx=10, pady=10)
 
         self.memory_canvas = tk.Canvas(
-            memory_frame, height=100, highlightthickness=0, bg="#f0f0f0")
+            memory_frame, height=50, highlightthickness=0, bg="#f0f0f0")
         self.memory_canvas.pack(fill=tk.X, pady=(5, 0))
 
         # 3. Similarity Metric
@@ -539,10 +531,8 @@ class App:
         total_samples = len(x_positions) * len(y_positions) * len(angles)
         sample_count = 0
 
-        # Initialize progress bar
-        self.progress_bar['maximum'] = total_samples
-        self.progress_bar['value'] = 0
-        self.progress_label['text'] = f"Sampling: 0/{total_samples}"
+        # Initialize status
+        self.status_label['text'] = f"Sampling: 0/{total_samples}"
 
         for x in x_positions:
             for y in y_positions:
@@ -566,12 +556,11 @@ class App:
 
                     sample_count += 1
 
-                    # Update progress bar and display periodically
+                    # Update status and display periodically
                     if SAMPLE_UPDATE_FREQUENCY is not None and (
                             sample_count % SAMPLE_UPDATE_FREQUENCY == 0
                             or sample_count == total_samples):
-                        self.progress_bar['value'] = sample_count
-                        self.progress_label['text'] = f"Sampling: {
+                        self.status_label['text'] = f"Sampling: {
                             sample_count}/{total_samples}"
 
                         # Update map display to show robot position and camera view
@@ -589,9 +578,8 @@ class App:
         self.update_map_display()
         self.draw_sample_dots()
 
-        # Clear progress bar
-        self.progress_bar['value'] = 0
-        self.progress_label['text'] = ""
+        # Clear status
+        self.status_label['text'] = ""
 
         if show_message:
             messagebox.showinfo(
@@ -619,14 +607,11 @@ class App:
 
         # Progress callback for training
         def update_training_progress(current, total):
-            self.progress_bar['value'] = current
-            self.progress_label['text'] = f"Training: {current}/{total}"
+            self.status_label['text'] = f"Training: {current}/{total}"
             self.root.update()  # Force UI update
 
-        # Initialize progress bar
-        self.progress_bar['maximum'] = len(self.sample_embeddings)
-        self.progress_bar['value'] = 0
-        self.progress_label['text'] = f"Training: 0/{
+        # Initialize status
+        self.status_label['text'] = f"Training: 0/{
             len(self.sample_embeddings)} "
 
         try:
@@ -641,9 +626,8 @@ class App:
             # Evaluate accuracy on random test positions
             self.evaluate_accuracy()
 
-            # Clear progress bar
-            self.progress_bar['value'] = 0
-            self.progress_label['text'] = ""
+            # Clear status
+            self.status_label['text'] = ""
 
             if show_message:
                 messagebox.showinfo(
@@ -651,8 +635,7 @@ class App:
                     f"Network trained with {len(self.sample_embeddings)} patterns\nAverage distance error: {self.accuracy_avg_distance:.2f} pixels")
 
         except Exception as e:
-            self.progress_bar['value'] = 0
-            self.progress_label['text'] = ""
+            self.status_label['text'] = ""
             messagebox.showerror(
                 "Training Error", f"Failed to train network: {str(e)}")
 
@@ -672,10 +655,8 @@ class App:
         original_y = self.robot_y
         original_angle = self.robot_angle
 
-        # Initialize progress bar
-        self.progress_bar['maximum'] = num_tests
-        self.progress_bar['value'] = 0
-        self.progress_label['text'] = f"Evaluating accuracy: 0/{num_tests}"
+        # Initialize status
+        self.status_label['text'] = f"Evaluating accuracy: 0/{num_tests}"
 
         total_distance_error = 0.0
         valid_tests = 0
@@ -739,9 +720,8 @@ class App:
             # Store test position for visualization
             self.test_positions.append((test_x, test_y))
 
-            # Update progress bar
-            self.progress_bar['value'] = i + 1
-            self.progress_label['text'] = f"Evaluating accuracy: {
+            # Update status
+            self.status_label['text'] = f"Evaluating accuracy: {
                 i + 1} /{num_tests} "
             self.root.update()
 
@@ -758,9 +738,8 @@ class App:
             # Update statistics display
             self.update_statistics_display()
 
-        # Clear progress bar
-        self.progress_bar['value'] = 0
-        self.progress_label['text'] = ""
+        # Clear status
+        self.status_label['text'] = ""
 
     def update_statistics_display(self):
         """Update the statistics display with accuracy information"""
@@ -1310,7 +1289,7 @@ class App:
         # If canvas not yet sized, use default
         if canvas_width <= 1:
             canvas_width = 300
-            canvas_height = 100
+            canvas_height = 50
 
         # Scale up the 1-pixel-high image to fill the canvas
         scaled_image = self.current_camera_view.resize(
@@ -1396,7 +1375,7 @@ class App:
         # If canvas not yet sized, use default
         if canvas_width <= 1:
             canvas_width = 300
-            canvas_height = 100
+            canvas_height = 50
 
         # Scale up the 1-pixel-high image to fill the canvas
         scaled_image = saved_view.resize(
@@ -1486,7 +1465,7 @@ class App:
         # If canvas not yet sized, use default
         if canvas_width <= 1:
             canvas_width = 300
-            canvas_height = 100
+            canvas_height = 50
 
         # Scale up the 1-pixel-high image to fill the canvas
         scaled_image = saved_view.resize(
