@@ -158,8 +158,7 @@ class App:
             "Edit Map": self.open_map_editor,
             "Import Map": self.import_map,
             "Export Map": self.export_map,
-            "Sample": self.auto_sample,
-            "Train": self.train_network
+            "Sample & Train": self.sample_and_train
         }
 
         for btn_text, command in buttons.items():
@@ -465,11 +464,32 @@ class App:
                 messagebox.showerror(
                     "Error", f"Failed to export map: {str(e)}")
 
-    def auto_sample(self):
+    def sample_and_train(self):
+        """
+        Automatically generate samples and train the network.
+        """
+        # First, run sampling
+        self.auto_sample(show_message=False)
+        
+        # Then, train the network if sampling was successful
+        if len(self.sample_embeddings) > 0:
+            self.train_network(show_message=False)
+            
+            # Show combined success message
+            if self.is_trained:
+                messagebox.showinfo(
+                    "Success",
+                    f"Generated {len(self.sample_positions)} samples and trained network with {len(self.sample_embeddings)} patterns"
+                )
+
+    def auto_sample(self, show_message=True):
         """
         Automatically generate samples from the current map.
         Samples at discrete positions with SAMPLE_STRIDE spacing and
         SAMPLE_ROTATIONS rotations at each position.
+        
+        Args:
+            show_message: Whether to show success message (default True)
         """
         # Clear existing samples
         self.sample_positions = []
@@ -548,12 +568,16 @@ class App:
         self.progress_bar['value'] = 0
         self.progress_label['text'] = ""
 
-        messagebox.showinfo("Success",
-                            f"Generated {len(self.sample_positions)} samples")
+        if show_message:
+            messagebox.showinfo("Success",
+                                f"Generated {len(self.sample_positions)} samples")
 
-    def train_network(self):
+    def train_network(self, show_message=True):
         """
         Train the Modern Hopfield Network using the collected samples.
+        
+        Args:
+            show_message: Whether to show success message (default True)
         """
         # Check if samples exist
         if len(self.sample_embeddings) == 0:
@@ -593,9 +617,10 @@ class App:
             self.progress_bar['value'] = 0
             self.progress_label['text'] = ""
 
-            messagebox.showinfo(
-                "Success",
-                f"Network trained with {len(self.sample_embeddings)} patterns")
+            if show_message:
+                messagebox.showinfo(
+                    "Success",
+                    f"Network trained with {len(self.sample_embeddings)} patterns")
 
         except Exception as e:
             self.progress_bar['value'] = 0
