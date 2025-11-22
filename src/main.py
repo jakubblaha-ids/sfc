@@ -33,7 +33,10 @@ class App:
         self.robot_angle = 0
         self.robot_rotation_speed = 7.5  # Degrees per key press
         self.cone_length = 40  # Length of the viewing cone
-        self.cone_angle = 360  # Cone angle in degrees
+        self.cone_angle = CAMERA_FOV  # Cone angle in degrees
+
+        # Camera preprocessing parameters
+        self.camera_blur_radius = CAMERA_BLUR_RADIUS
 
         # Camera parameters
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
@@ -54,6 +57,9 @@ class App:
         self.estimated_y = None
         self.estimated_angle = None
         self.retrieved_sample_idx = None
+
+        # Similarity scores for visualization
+        self.sample_similarities = None  # Array of similarity scores for each sample
 
         # Hover state
         self.hovered_sample_idx = None
@@ -216,6 +222,75 @@ class App:
         self.sim_canvas = tk.Canvas(
             sim_frame, height=40, highlightthickness=0)
         self.sim_canvas.pack(fill=tk.X, pady=(5, 0))
+
+        # 4. Camera Settings
+        settings_frame = tk.Frame(self.right_panel)
+        settings_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        tk.Label(
+            settings_frame, text="Camera Settings",
+            font=("Arial", 10, "bold")).pack(
+            anchor="w", pady=(0, 5))
+
+        # Blur slider
+        blur_container = tk.Frame(settings_frame)
+        blur_container.pack(fill=tk.X, pady=5)
+
+        blur_label_frame = tk.Frame(blur_container)
+        blur_label_frame.pack(fill=tk.X)
+
+        tk.Label(blur_label_frame, text="Blur Radius:").pack(side=tk.LEFT)
+        self.blur_value_label = tk.Label(
+            blur_label_frame, text=f"{self.camera_blur_radius:.1f}")
+        self.blur_value_label.pack(side=tk.LEFT, padx=5)
+
+        self.blur_slider = tk.Scale(
+            blur_container,
+            from_=0.0,
+            to=5.0,
+            resolution=0.1,
+            orient=tk.HORIZONTAL,
+            command=self.on_blur_change,
+            showvalue=False
+        )
+        self.blur_slider.set(self.camera_blur_radius)
+        self.blur_slider.pack(fill=tk.X)
+
+        # FOV slider
+        fov_container = tk.Frame(settings_frame)
+        fov_container.pack(fill=tk.X, pady=5)
+
+        fov_label_frame = tk.Frame(fov_container)
+        fov_label_frame.pack(fill=tk.X)
+
+        tk.Label(fov_label_frame, text="Field of View:").pack(side=tk.LEFT)
+        self.fov_value_label = tk.Label(
+            fov_label_frame, text=f"{self.cone_angle:.0f}°")
+        self.fov_value_label.pack(side=tk.LEFT, padx=5)
+
+        self.fov_slider = tk.Scale(
+            fov_container,
+            from_=30,
+            to=360,
+            resolution=5,
+            orient=tk.HORIZONTAL,
+            command=self.on_fov_change,
+            showvalue=False
+        )
+        self.fov_slider.set(self.cone_angle)
+        self.fov_slider.pack(fill=tk.X)
+
+    def on_blur_change(self, value):
+        """Handle blur slider change"""
+        self.camera_blur_radius = float(value)
+        self.blur_value_label.config(text=f"{self.camera_blur_radius:.1f}")
+        self.update_map_display()
+
+    def on_fov_change(self, value):
+        """Handle FOV slider change"""
+        self.cone_angle = float(value)
+        self.fov_value_label.config(text=f"{self.cone_angle:.0f}°")
+        self.update_map_display()
 
     def open_map_editor(self):
         MapEditor(self.root, self.current_map_image, self.on_map_saved)
@@ -487,16 +562,34 @@ class App:
         self.sample_dots = []
 
     def draw_sample_dots(self):
-        """Draw red dots at sample positions on the canvas"""
+        """Draw red dots at sample positions on the canvas, sized by similarity"""
         self.clear_sample_dots()
 
         for i, (x, y, _angle) in enumerate(self.sample_positions):
+            # Calculate dot radius based on similarity if available
+            if self.sample_similarities is not None and i < len(
+                    self.sample_similarities):
+                # Scale radius based on attention weight
+                # Use sqrt to make size differences more visible
+                similarity = self.sample_similarities[i]
+                # Map similarity to radius: min radius = 1, max radius = 10
+                min_radius = 1
+                max_radius = 10
+                # Add small epsilon to avoid division by zero
+                max_similarity = max(self.sample_similarities.max(), 1e-6)
+                normalized_similarity = similarity / max_similarity
+                dot_radius = min_radius + (
+                    max_radius - min_radius) * np.sqrt(normalized_similarity)
+            else:
+                # Default radius if no similarity data
+                dot_radius = SAMPLE_DOT_RADIUS
+
             # Draw a red dot
             dot_id = self.map_canvas.create_oval(
-                x - SAMPLE_DOT_RADIUS,
-                y - SAMPLE_DOT_RADIUS,
-                x + SAMPLE_DOT_RADIUS,
-                y + SAMPLE_DOT_RADIUS,
+                x - dot_radius,
+                y - dot_radius,
+                x + dot_radius,
+                y + dot_radius,
                 fill=COLOR_SAMPLE_DOT,
                 outline=COLOR_SAMPLE_DOT,
                 tags=("sample_dot", f"sample_{i}")
@@ -514,11 +607,22 @@ class App:
 
         # Find the closest sample within a reasonable distance
         closest_idx = None
-        min_distance = SAMPLE_DOT_RADIUS * 3  # Search radius
+        min_distance = 15  # Generous search radius to account for larger dots
 
         for i, (x, y, _angle) in enumerate(self.sample_positions):
             distance = math.sqrt((x - canvas_x)**2 + (y - canvas_y)**2)
-            if distance < min_distance:
+            # Calculate the actual radius of this dot if similarity data exists
+            if self.sample_similarities is not None and i < len(
+                    self.sample_similarities):
+                similarity = self.sample_similarities[i]
+                max_similarity = max(self.sample_similarities.max(), 1e-6)
+                normalized_similarity = similarity / max_similarity
+                dot_radius = 1 + 9 * np.sqrt(normalized_similarity)
+                hover_threshold = dot_radius + 5  # Add some margin
+            else:
+                hover_threshold = SAMPLE_DOT_RADIUS + 5
+
+            if distance < hover_threshold and distance < min_distance:
                 min_distance = distance
                 closest_idx = i
 
@@ -545,18 +649,18 @@ class App:
         self.map_canvas.create_image(
             0, 0, image=self.tk_map_image, anchor="nw")
 
-        # Draw sample dots (behind robot)
-        self.draw_sample_dots()
-
         # Update camera view
         self.capture_camera_view()
         self.display_camera_view()
 
-        # Perform localization if network is trained
+        # Perform localization if network is trained (sets estimated position)
         if self.is_trained:
             self.localize()
 
-        # Draw robot on top (after localization so estimated angle is current)
+        # Draw sample dots (after localization so similarities are computed)
+        self.draw_sample_dots()
+
+        # Draw robot on top (after sample dots so it's always visible)
         self.draw_robot()
 
     def draw_robot(self):
@@ -779,7 +883,7 @@ class App:
         self.current_camera_view.putdata(camera_strip)
 
         # Apply Gaussian blur to make observations more robust to small changes
-        if CAMERA_BLUR_RADIUS > 0:
+        if self.camera_blur_radius > 0:
             # Resize to larger height temporarily for better blur effect
             temp_height = 10
             temp_view = self.current_camera_view.resize(
@@ -788,7 +892,7 @@ class App:
             )
             # Apply blur
             temp_view = temp_view.filter(ImageFilter.GaussianBlur(
-                radius=CAMERA_BLUR_RADIUS))
+                radius=self.camera_blur_radius))
             # Resize back to 1D strip (take middle row)
             self.current_camera_view = temp_view.resize(
                 (self.camera_samples, 1),
@@ -840,11 +944,20 @@ class App:
             # Create embedding from current camera view
             query_embedding = self.create_embedding(self.current_camera_view)
 
-            # Retrieve best matching pattern
-            indices, weights = self.hopfield_network.retrieve(
-                query_embedding, top_k=1)
-            best_idx = indices[0]
-            best_weight = weights[0]
+            # Retrieve ALL patterns with their attention weights for visualization
+            # This gives us similarity scores for all samples
+            all_indices, all_weights = self.hopfield_network.retrieve(
+                query_embedding, top_k=len(self.sample_embeddings))
+
+            # Store all similarities for dot visualization
+            # Need to create an array with similarities in original order (not sorted)
+            self.sample_similarities = np.zeros(len(self.sample_embeddings))
+            for idx, weight in zip(all_indices, all_weights):
+                self.sample_similarities[idx] = weight
+
+            # Get best matching pattern (first in the sorted results)
+            best_idx = all_indices[0]
+            best_weight = all_weights[0]
 
             # Store retrieved sample index
             self.retrieved_sample_idx = best_idx

@@ -30,3 +30,6 @@ SAMPLE_DOT_RADIUS = 3  # Size of the sample position dots
 # Camera preprocessing
 # Gaussian blur radius for camera observations (0 = no blur, 1.0-2.0 recommended)
 CAMERA_BLUR_RADIUS = 1.5
+
+# Camera FOV (field of view in degrees)
+CAMERA_FOV = 120  # Default cone angle
