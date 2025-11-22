@@ -39,4 +39,10 @@ CAMERA_FOV = 120  # Default cone angle
 # Embedding encoding method
 # True: Interleaved RGB per pixel [R0, G0, B0, R1, G1, B1, ...]
 # False: Channel-separated [R0, R1, ..., G0, G1, ..., B0, B1, ...]
-INTERLEAVED_RGB = False
+INTERLEAVED_RGB = True
+
+# Modern Hopfield Network parameters
+# Beta (inverse temperature) controls sharpness of retrieval
+# Higher beta = sharper, more confident retrievals
+# Lower beta = softer, more distributed retrievals
+DEFAULT_BETA = 50.0

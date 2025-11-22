@@ -1,0 +1,2 @@
+-   noise/random objects
+-   localization confidence heatmap

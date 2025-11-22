@@ -53,6 +53,12 @@ class App:
         self.camera_blur_radius = CAMERA_BLUR_RADIUS
         self.visibility_index = 0.1  # Distance opacity factor (default 0.1)
 
+        # Hopfield Network parameters
+        self.beta = DEFAULT_BETA  # Inverse temperature parameter
+
+        # Embedding parameters
+        self.interleaved_rgb = tk.BooleanVar(value=INTERLEAVED_RGB)
+
         # Camera parameters
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
         self.current_camera_view = None  # Store current camera strip
@@ -311,6 +317,39 @@ class App:
         self.visibility_slider.set(self.visibility_index)
         self.visibility_slider.pack(fill=tk.X, pady=(5, 0))
 
+        # Beta (inverse temperature) slider
+        beta_container = ttk.Frame(settings_frame)
+        beta_container.pack(fill=tk.X, pady=5)
+
+        beta_label_frame = ttk.Frame(beta_container)
+        beta_label_frame.pack(fill=tk.X)
+
+        ttk.Label(
+            beta_label_frame, text="Beta (Inverse Temp):").pack(
+            side=tk.LEFT)
+        self.beta_value_label = ttk.Label(
+            beta_label_frame, text=f"{self.beta:.1f}")
+        self.beta_value_label.pack(side=tk.LEFT, padx=5)
+
+        self.beta_slider = ttk.Scale(
+            beta_container,
+            from_=1.0,
+            to=200.0,
+            orient=tk.HORIZONTAL,
+            command=self.on_beta_change
+        )
+        self.beta_slider.set(self.beta)
+        self.beta_slider.pack(fill=tk.X, pady=(5, 0))
+
+        # Interleaved RGB checkbox
+        self.interleaved_rgb_checkbox = ttk.Checkbutton(
+            settings_frame,
+            text="Interleaved RGB encoding",
+            variable=self.interleaved_rgb,
+            command=self.on_interleaved_rgb_toggle
+        )
+        self.interleaved_rgb_checkbox.pack(fill=tk.X, pady=(10, 0))
+
         # 5. Statistics Frame
         stats_frame = ttk.LabelFrame(
             self.right_panel, text="Accuracy Statistics", padding=10)
@@ -354,6 +393,28 @@ class App:
         self.visibility_index = float(value)
         self.visibility_value_label.config(text=f"{self.visibility_index:.2f}")
         self.update_map_display()
+
+    def on_beta_change(self, value):
+        """Handle beta slider change"""
+        self.beta = float(value)
+        self.beta_value_label.config(text=f"{self.beta:.1f}")
+
+        # Update the Hopfield Network beta if it's already trained
+        if self.hopfield_network is not None:
+            self.hopfield_network.beta = self.beta
+            # Re-run localization to show immediate effect
+            if self.is_trained:
+                self.update_map_display()
+
+    def on_interleaved_rgb_toggle(self):
+        """Handle interleaved RGB checkbox toggle"""
+        # If the network is already trained, warn the user that retraining is needed
+        if self.is_trained:
+            messagebox.showwarning(
+                "Retraining Required",
+                "Changing the RGB encoding method requires retraining the network.\n\n"
+                "Please click 'Sample & Train' again to apply this change."
+            )
 
     def open_map_editor(self):
         MapEditor(self.root, self.current_map_image, self.on_map_saved)
@@ -602,8 +663,9 @@ class App:
         # Get embedding dimension from first sample
         embedding_dim = len(self.sample_embeddings[0])
 
-        # Initialize the Hopfield Network
-        self.hopfield_network = ModernHopfieldNetwork(embedding_dim, beta=50.0)
+        # Initialize the Hopfield Network with current beta value
+        self.hopfield_network = ModernHopfieldNetwork(
+            embedding_dim, beta=self.beta)
 
         # Progress callback for training
         def update_training_progress(current, total):
@@ -767,7 +829,7 @@ class App:
         pixels = list(camera_view.getdata())
 
         # Flatten RGB values into a single vector
-        if INTERLEAVED_RGB:
+        if self.interleaved_rgb.get():
             # Interleaved: [R0, G0, B0, R1, G1, B1, ...]
             embedding = []
             for r, g, b in pixels:
