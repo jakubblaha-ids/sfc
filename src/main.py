@@ -33,6 +33,10 @@ class App:
         self.cone_length = 40  # Length of the viewing cone
         self.cone_angle = 90  # Cone angle in degrees
 
+        # Camera parameters
+        self.camera_samples = 100  # Number of pixel samples in the 1D strip
+        self.current_camera_view = None  # Store current camera strip
+
         # Configure styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
@@ -277,6 +281,10 @@ class App:
             0, 0, image=self.tk_map_image, anchor="nw")
         self.draw_robot()
 
+        # Update camera view
+        self.capture_camera_view()
+        self.display_camera_view()
+
     def draw_robot(self):
         # Draw the viewing cone first (behind the robot)
         self.draw_viewing_cone()
@@ -396,6 +404,77 @@ class App:
                 return distance
 
         return max_distance
+
+    def capture_camera_view(self):
+        """
+        Capture a 1D strip of pixels from what the robot sees.
+        Samples pixels along rays cast from the robot's viewing direction.
+        """
+        half_cone = self.cone_angle / 2
+        pixels = self.current_map_image.load()
+
+        # Create a list to store RGB values for each sample
+        camera_strip = []
+
+        # Sample pixels across the cone angle
+        for i in range(self.camera_samples):
+            # Calculate angle for this sample
+            angle_offset = -half_cone + (self.cone_angle * i /
+                                         (self.camera_samples - 1))
+            current_angle = math.radians(self.robot_angle + angle_offset)
+
+            # Calculate direction vector
+            dx = math.cos(current_angle)
+            dy = math.sin(current_angle)
+
+            # Cast ray to find the distance to wall/edge
+            distance = self.cast_ray(self.robot_x, self.robot_y, dx, dy)
+
+            # Get the pixel at that point
+            end_x = self.robot_x + distance * dx
+            end_y = self.robot_y + distance * dy
+
+            # Clamp to map bounds
+            pixel_x = int(round(max(0, min(MAP_WIDTH - 1, end_x))))
+            pixel_y = int(round(max(0, min(MAP_HEIGHT - 1, end_y))))
+
+            # Get the RGB color at this point
+            color = pixels[pixel_x, pixel_y]
+            camera_strip.append(color)
+
+        # Store as PIL Image (1D image with height=1)
+        self.current_camera_view = Image.new('RGB', (self.camera_samples, 1))
+        self.current_camera_view.putdata(camera_strip)
+
+    def display_camera_view(self):
+        """Display the camera view in the input canvas"""
+        if self.current_camera_view is None:
+            return
+
+        # Get canvas dimensions
+        canvas_width = self.input_canvas.winfo_width()
+        canvas_height = self.input_canvas.winfo_height()
+
+        # If canvas not yet sized, use default
+        if canvas_width <= 1:
+            canvas_width = 300
+            canvas_height = 100
+
+        # Scale up the 1-pixel-high image to fill the canvas
+        scaled_image = self.current_camera_view.resize(
+            (canvas_width, canvas_height),
+            Image.Resampling.NEAREST  # Use nearest neighbor to keep sharp pixels
+        )
+
+        # Convert to PhotoImage
+        tk_image = ImageTk.PhotoImage(scaled_image)
+
+        # Clear canvas and draw
+        self.input_canvas.delete("all")
+        self.input_canvas.create_image(0, 0, image=tk_image, anchor="nw")
+
+        # Store reference to prevent garbage collection
+        self.input_canvas.image = tk_image
 
     def move_robot(self, dx, dy):
         # Update robot position
