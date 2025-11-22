@@ -93,7 +93,7 @@ The application window will be arranged in a split-screen layout to visualize bo
 
 ### 3.5. Technology Stack
 - **Language**: Python 3.10+
-- **UI Framework**: Pygame (chosen for its efficient real-time rendering loop and easy integration with Numpy for pixel manipulation).
+- **UI Framework**: Tkinter (chosen for its simplicity and standard library availability).
 - **Libraries**: Numpy (pure Numpy implementation for MHN).
 
 ## 4. Implementation Plan
