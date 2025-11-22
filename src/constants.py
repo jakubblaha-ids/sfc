@@ -26,6 +26,8 @@ SAMPLE_STRIDE = 50  # Pixels between sample positions
 # Number of rotations at each position (45-degree increments)
 SAMPLE_ROTATIONS = 8
 SAMPLE_DOT_RADIUS = 3  # Size of the sample position dots
+# Update display every N samples during auto-sampling (set to None to disable updates)
+SAMPLE_UPDATE_FREQUENCY = None
 
 # Camera preprocessing
 # Gaussian blur radius for camera observations (0 = no blur, 1.0-2.0 recommended)
@@ -33,3 +35,8 @@ CAMERA_BLUR_RADIUS = 1.5
 
 # Camera FOV (field of view in degrees)
 CAMERA_FOV = 120  # Default cone angle
+
+# Embedding encoding method
+# True: Interleaved RGB per pixel [R0, G0, B0, R1, G1, B1, ...]
+# False: Channel-separated [R0, R1, ..., G0, G1, ..., B0, B1, ...]
+INTERLEAVED_RGB = False

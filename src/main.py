@@ -19,6 +19,11 @@ class App:
         # Configuration manager
         self.config = ConfigManager()
 
+        # Load robot image
+        self.robot_image = None
+        self.tk_robot_image = None
+        self.load_robot_image()
+
         # Map Data
         self.current_map_image = Image.new(
             "RGB", (MAP_WIDTH, MAP_HEIGHT), "white")
@@ -299,6 +304,20 @@ class App:
         self.current_map_image = new_map_image
         self.update_map_display()
 
+    def load_robot_image(self):
+        """Load the robot image from resources"""
+        try:
+            robot_image_path = os.path.join(
+                os.path.dirname(__file__), "resources", "uii.png")
+            self.robot_image = Image.open(robot_image_path)
+            # Convert to RGBA if not already
+            if self.robot_image.mode != "RGBA":
+                self.robot_image = self.robot_image.convert("RGBA")
+            print(f"Loaded robot image: {robot_image_path}")
+        except Exception as e:
+            print(f"Failed to load robot image: {e}")
+            self.robot_image = None
+
     def load_last_map(self):
         """Load the last used map automatically on startup"""
         last_path = self.config.get_last_map_path()
@@ -459,12 +478,19 @@ class App:
 
                     sample_count += 1
 
-                    # Update progress bar
-                    if sample_count % 10 == 0 or sample_count == total_samples:
+                    # Update progress bar and display periodically
+                    if SAMPLE_UPDATE_FREQUENCY is not None and (
+                            sample_count % SAMPLE_UPDATE_FREQUENCY == 0
+                            or sample_count == total_samples):
                         self.progress_bar['value'] = sample_count
                         self.progress_label['text'] = f"Sampling: {
-                            sample_count} /{total_samples} "
-                        self.root.update()  # Force UI update
+                            sample_count}/{total_samples}"
+
+                        # Update map display to show robot position and camera view
+                        self.update_map_display_during_sampling()
+
+                        # Force UI update
+                        self.root.update()
 
         # Restore original robot state
         self.robot_x = original_x
@@ -549,9 +575,17 @@ class App:
         pixels = list(camera_view.getdata())
 
         # Flatten RGB values into a single vector
-        embedding = []
-        for r, g, b in pixels:
-            embedding.extend([r, g, b])
+        if INTERLEAVED_RGB:
+            # Interleaved: [R0, G0, B0, R1, G1, B1, ...]
+            embedding = []
+            for r, g, b in pixels:
+                embedding.extend([r, g, b])
+        else:
+            # Channel-separated: [R0, R1, ..., G0, G1, ..., B0, B1, ...]
+            r_channel = [pixel[0] for pixel in pixels]
+            g_channel = [pixel[1] for pixel in pixels]
+            b_channel = [pixel[2] for pixel in pixels]
+            embedding = r_channel + g_channel + b_channel
 
         return np.array(embedding, dtype=np.float32)
 
@@ -637,6 +671,28 @@ class App:
                 # Clear the retrieved memory canvas
                 self.memory_canvas.delete("all")
 
+    def update_map_display_during_sampling(self):
+        """Update map display during sampling to show robot position and camera view"""
+        # Create a copy of the map to draw on
+        display_image = self.current_map_image.copy()
+
+        # Draw the viewing cone with transparency on the image
+        self.draw_viewing_cone_on_image(display_image)
+
+        self.tk_map_image = ImageTk.PhotoImage(display_image)
+        self.map_canvas.delete("all")
+        self.map_canvas.create_image(
+            0, 0, image=self.tk_map_image, anchor="nw")
+
+        # Draw existing sample dots
+        self.draw_sample_dots()
+
+        # Draw robot position
+        self.draw_robot()
+
+        # Display current camera view
+        self.display_camera_view()
+
     def update_map_display(self):
         # Create a copy of the map to draw on
         display_image = self.current_map_image.copy()
@@ -664,29 +720,40 @@ class App:
         self.draw_robot()
 
     def draw_robot(self):
-        # Draw robot ground truth direction line (blue)
-        line_length = 20
-        angle_rad = math.radians(self.robot_angle)
-        end_x = self.robot_x + line_length * math.cos(angle_rad)
-        end_y = self.robot_y + line_length * math.sin(angle_rad)
-        self.map_canvas.create_line(
-            self.robot_x, self.robot_y,
-            end_x, end_y,
-            fill=COLOR_ROBOT_GT,  # Blue
-            width=2,
-            tags="robot_direction"
-        )
+        # Draw robot ground truth as image
+        if self.robot_image is not None:
+            # Rotate the image according to robot angle
+            # PIL rotation is counterclockwise, and 0 degrees points right
+            rotated_image = self.robot_image.rotate(
+                -self.robot_angle, expand=True)
 
-        # Draw robot ground truth as a blue circle
-        self.map_canvas.create_oval(
-            self.robot_x - self.robot_radius,
-            self.robot_y - self.robot_radius,
-            self.robot_x + self.robot_radius,
-            self.robot_y + self.robot_radius,
-            fill=COLOR_ROBOT_GT,
-            outline=COLOR_ROBOT_GT,
-            tags="robot"
-        )
+            # Resize to appropriate size (e.g., 30x30 pixels)
+            robot_size = 100
+            rotated_image = rotated_image.resize(
+                (robot_size, robot_size),
+                Image.Resampling.LANCZOS)
+
+            # Convert to PhotoImage
+            self.tk_robot_image = ImageTk.PhotoImage(rotated_image)
+
+            # Draw image centered on robot position
+            self.map_canvas.create_image(
+                self.robot_x, self.robot_y,
+                image=self.tk_robot_image,
+                anchor="center",
+                tags="robot"
+            )
+        else:
+            # Fallback: Draw robot ground truth as a blue circle if image not loaded
+            self.map_canvas.create_oval(
+                self.robot_x - self.robot_radius,
+                self.robot_y - self.robot_radius,
+                self.robot_x + self.robot_radius,
+                self.robot_y + self.robot_radius,
+                fill=COLOR_ROBOT_GT,
+                outline=COLOR_ROBOT_GT,
+                tags="robot"
+            )
 
         # Draw estimated position (green circle with purple direction line) last so it's always visible
         if self.estimated_x is not None and self.estimated_y is not None:
