@@ -76,6 +76,14 @@ class App:
         # Similarity scores for visualization
         self.sample_similarities = None  # Array of similarity scores for each sample
 
+        # Accuracy statistics
+        self.accuracy_avg_distance = None  # Average distance error
+        self.accuracy_num_tests = None  # Number of test positions
+        # List of (x, y) tuples for evaluated positions
+        self.test_positions = []
+        self.test_position_dots = []  # Canvas IDs of test position dots
+        self.show_test_positions = tk.BooleanVar(value=False)  # Checkbox state
+
         # Hover state
         self.hovered_sample_idx = None
 
@@ -310,6 +318,32 @@ class App:
         )
         self.visibility_slider.set(self.visibility_index)
         self.visibility_slider.pack(fill=tk.X, pady=(5, 0))
+
+        # 5. Statistics Frame
+        stats_frame = ttk.LabelFrame(
+            self.right_panel, text="Accuracy Statistics", padding=10)
+        stats_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        self.stats_label = ttk.Label(
+            stats_frame,
+            text="Train the network to see accuracy statistics",
+            font=("Arial", 9),
+            justify=tk.LEFT
+        )
+        self.stats_label.pack(fill=tk.X, pady=5)
+
+        # Checkbox to show test positions
+        self.show_test_positions_checkbox = ttk.Checkbutton(
+            stats_frame,
+            text="Show test positions",
+            variable=self.show_test_positions,
+            command=self.on_show_test_positions_toggle
+        )
+        self.show_test_positions_checkbox.pack(fill=tk.X, pady=(5, 0))
+
+    def on_show_test_positions_toggle(self):
+        """Handle checkbox toggle for showing test positions"""
+        self.update_map_display()
 
     def on_blur_change(self, value):
         """Handle blur slider change"""
@@ -604,6 +638,9 @@ class App:
 
             self.is_trained = True
 
+            # Evaluate accuracy on random test positions
+            self.evaluate_accuracy()
+
             # Clear progress bar
             self.progress_bar['value'] = 0
             self.progress_label['text'] = ""
@@ -611,13 +648,130 @@ class App:
             if show_message:
                 messagebox.showinfo(
                     "Success",
-                    f"Network trained with {len(self.sample_embeddings)} patterns")
+                    f"Network trained with {len(self.sample_embeddings)} patterns\nAverage distance error: {self.accuracy_avg_distance:.2f} pixels")
 
         except Exception as e:
             self.progress_bar['value'] = 0
             self.progress_label['text'] = ""
             messagebox.showerror(
                 "Training Error", f"Failed to train network: {str(e)}")
+
+    def evaluate_accuracy(self, num_tests=100):
+        """
+        Evaluate the accuracy of the trained network by testing on random positions.
+        Computes the average distance between predicted and actual closest sample positions.
+
+        Args:
+            num_tests: Number of random test positions (default: 100)
+        """
+        if not self.is_trained or self.hopfield_network is None:
+            return
+
+        # Store original robot state
+        original_x = self.robot_x
+        original_y = self.robot_y
+        original_angle = self.robot_angle
+
+        # Initialize progress bar
+        self.progress_bar['maximum'] = num_tests
+        self.progress_bar['value'] = 0
+        self.progress_label['text'] = f"Evaluating accuracy: 0/{num_tests}"
+
+        total_distance_error = 0.0
+        valid_tests = 0
+
+        # Clear previous test positions
+        self.test_positions = []
+
+        # Generate random test positions
+        for i in range(num_tests):
+            # Random position on the map
+            test_x = np.random.randint(0, MAP_WIDTH)
+            test_y = np.random.randint(0, MAP_HEIGHT)
+            test_angle = np.random.uniform(0, 360)
+
+            # Position robot at test location
+            self.robot_x = test_x
+            self.robot_y = test_y
+            self.robot_angle = test_angle
+
+            # Capture camera view
+            self.capture_camera_view()
+
+            # Create embedding
+            query_embedding = self.create_embedding(self.current_camera_view)
+
+            # Retrieve best matching pattern
+            best_idx, _best_weight = self.hopfield_network.retrieve(
+                query_embedding, top_k=1)
+            best_idx = best_idx[0]
+
+            # Get predicted position
+            pred_x, pred_y, _pred_angle = self.sample_positions[best_idx]
+
+            # Find the actual closest sample to test position
+            min_distance = float('inf')
+            closest_x = test_x  # Initialize with test position
+            closest_y = test_y
+            for sample_x, sample_y, sample_angle in self.sample_positions:
+                # Calculate distance considering both position and angle
+                pos_distance = math.sqrt(
+                    (sample_x - test_x) ** 2 + (sample_y - test_y) ** 2)
+                angle_diff = abs(sample_angle - test_angle)
+                # Normalize angle difference to [0, 180]
+                angle_diff = min(angle_diff, 360 - angle_diff)
+
+                # Combined distance (position + weighted angle)
+                # Weight angle less since position is more important
+                combined_distance = pos_distance + (angle_diff / 180.0) * 10
+
+                if combined_distance < min_distance:
+                    min_distance = combined_distance
+                    closest_x = sample_x
+                    closest_y = sample_y
+
+            # Calculate distance error (Euclidean distance)
+            distance_error = math.sqrt(
+                (pred_x - closest_x) ** 2 + (pred_y - closest_y) ** 2)
+            total_distance_error += distance_error
+            valid_tests += 1
+
+            # Store test position for visualization
+            self.test_positions.append((test_x, test_y))
+
+            # Update progress bar
+            self.progress_bar['value'] = i + 1
+            self.progress_label['text'] = f"Evaluating accuracy: {
+                i + 1} /{num_tests} "
+            self.root.update()
+
+        # Restore original robot state
+        self.robot_x = original_x
+        self.robot_y = original_y
+        self.robot_angle = original_angle
+
+        # Calculate average distance error
+        if valid_tests > 0:
+            self.accuracy_avg_distance = total_distance_error / valid_tests
+            self.accuracy_num_tests = valid_tests
+
+            # Update statistics display
+            self.update_statistics_display()
+
+        # Clear progress bar
+        self.progress_bar['value'] = 0
+        self.progress_label['text'] = ""
+
+    def update_statistics_display(self):
+        """Update the statistics display with accuracy information"""
+        if self.accuracy_avg_distance is not None:
+            stats_text = f"Test Positions: {self.accuracy_num_tests}\n"
+            stats_text += f"Avg Distance Error: {
+                self.accuracy_avg_distance: .2f}  pixels"
+            self.stats_label.config(text=stats_text)
+        else:
+            self.stats_label.config(
+                text="Train the network to see accuracy statistics")
 
     def create_embedding(self, camera_view):
         """
@@ -695,6 +849,40 @@ class App:
                 tags=("sample_dot", f"sample_{i}")
             )
             self.sample_dots.append(dot_id)
+
+    def clear_test_position_dots(self):
+        """Remove all test position dots from the canvas"""
+        for dot_id in self.test_position_dots:
+            self.map_canvas.delete(dot_id)
+        self.test_position_dots = []
+
+    def draw_test_position_dots(self):
+        """Draw blue squares at test positions on the canvas"""
+        self.clear_test_position_dots()
+
+        # Only draw if checkbox is checked
+        if not self.show_test_positions.get():
+            return
+
+        # Fixed size for test position dots
+        dot_radius = 2
+
+        for x, y in self.test_positions:
+            # Convert to canvas coordinates
+            canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
+            scaled_radius = dot_radius * self.map_scale_factor
+
+            # Draw a blue square
+            dot_id = self.map_canvas.create_rectangle(
+                canvas_x - scaled_radius,
+                canvas_y - scaled_radius,
+                canvas_x + scaled_radius,
+                canvas_y + scaled_radius,
+                fill="#0000FF",  # Blue
+                outline="#0000FF",
+                tags="test_position_dot"
+            )
+            self.test_position_dots.append(dot_id)
 
     def on_map_canvas_resize(self, event):
         """Handle map canvas resize and update display"""
@@ -846,6 +1034,9 @@ class App:
 
         # Draw sample dots (after localization so similarities are computed)
         self.draw_sample_dots()
+
+        # Draw test position dots if enabled
+        self.draw_test_position_dots()
 
         # Draw robot on top (after sample dots so it's always visible)
         self.draw_robot()
