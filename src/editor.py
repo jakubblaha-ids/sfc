@@ -39,6 +39,11 @@ class MapEditor:
             toolbar, text="Eraser (Free)", command=self.use_eraser)
         btn_eraser.pack(side=tk.LEFT, padx=5, pady=5)
 
+        # Clear Map Button
+        btn_clear = tk.Button(
+            toolbar, text="Clear Map", command=self.clear_map)
+        btn_clear.pack(side=tk.LEFT, padx=5, pady=5)
+
         # Save Button
         btn_save = tk.Button(
             toolbar, text="Save & Close", command=self.save_map)
@@ -81,6 +86,13 @@ class MapEditor:
     def update_canvas(self):
         self.tk_image = ImageTk.PhotoImage(self.image)
         self.canvas.create_image(0, 0, image=self.tk_image, anchor="nw")
+
+    def clear_map(self):
+        """Clear the entire map to white"""
+        self.image = Image.new("RGB", (MAP_WIDTH, MAP_HEIGHT), "white")
+        self.draw = ImageDraw.Draw(self.image)
+        self.canvas.delete("all")
+        self.update_canvas()
 
     def save_map(self):
         if self.on_save_callback:
