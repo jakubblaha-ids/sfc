@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from constants import *
-from PIL import Image, ImageTk, ImageFilter
+from PIL import Image, ImageTk, ImageFilter, ImageDraw
 from editor import MapEditor
 from config import ConfigManager
 from hopfield import ModernHopfieldNetwork
@@ -33,7 +33,7 @@ class App:
         self.robot_angle = 0
         self.robot_rotation_speed = 7.5  # Degrees per key press
         self.cone_length = 40  # Length of the viewing cone
-        self.cone_angle = 120  # Cone angle in degrees
+        self.cone_angle = 360  # Cone angle in degrees
 
         # Camera parameters
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
@@ -534,7 +534,13 @@ class App:
                 self.memory_canvas.delete("all")
 
     def update_map_display(self):
-        self.tk_map_image = ImageTk.PhotoImage(self.current_map_image)
+        # Create a copy of the map to draw on
+        display_image = self.current_map_image.copy()
+
+        # Draw the viewing cone with transparency on the image
+        self.draw_viewing_cone_on_image(display_image)
+
+        self.tk_map_image = ImageTk.PhotoImage(display_image)
         self.map_canvas.delete("all")
         self.map_canvas.create_image(
             0, 0, image=self.tk_map_image, anchor="nw")
@@ -554,8 +560,18 @@ class App:
         self.draw_robot()
 
     def draw_robot(self):
-        # Draw the viewing cone first (behind the robot)
-        self.draw_viewing_cone()
+        # Draw robot ground truth direction line (blue)
+        line_length = 20
+        angle_rad = math.radians(self.robot_angle)
+        end_x = self.robot_x + line_length * math.cos(angle_rad)
+        end_y = self.robot_y + line_length * math.sin(angle_rad)
+        self.map_canvas.create_line(
+            self.robot_x, self.robot_y,
+            end_x, end_y,
+            fill=COLOR_ROBOT_GT,  # Blue
+            width=2,
+            tags="robot_direction"
+        )
 
         # Draw robot ground truth as a blue circle
         self.map_canvas.create_oval(
@@ -595,16 +611,17 @@ class App:
                 tags="estimated"
             )
 
-    def draw_viewing_cone(self):
+    def draw_viewing_cone_on_image(self, image):
+        """Draw the viewing cone with 50% transparency directly on a PIL image"""
         # Calculate the cone's arc points
         half_cone = self.cone_angle / 2
 
         # Starting point is the robot center
-        points = [self.robot_x, self.robot_y]
+        points = [(self.robot_x, self.robot_y)]
 
         # Create the cone arc
         # Add points along the arc from -half_cone to +half_cone
-        num_points = 20
+        num_points = 50  # More points for smoother curve
         for i in range(num_points + 1):
             angle_offset = -half_cone + (self.cone_angle * i / num_points)
             current_angle = math.radians(self.robot_angle + angle_offset)
@@ -619,19 +636,21 @@ class App:
 
             x = self.robot_x + distance * dx
             y = self.robot_y + distance * dy
-            points.extend([x, y])
+            points.append((x, y))
 
-        # Close the polygon back to the center
-        points.extend([self.robot_x, self.robot_y])
+        # Create a transparent overlay
+        overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
 
-        # Draw the cone with semi-transparent blue
-        self.map_canvas.create_polygon(
-            points,
-            fill=COLOR_ROBOT_GT,
-            stipple="gray50",  # Makes it semi-transparent
-            outline=COLOR_ROBOT_GT,
-            tags="cone"
-        )
+        # Convert hex color to RGBA with 50% opacity (alpha=127)
+        # COLOR_ROBOT_GT is "#0000FF" (blue)
+        cone_color = (0, 0, 255, 127)  # RGBA: blue with 50% opacity
+
+        # Draw the polygon
+        draw.polygon(points, fill=cone_color, outline=None)
+
+        # Composite the overlay onto the original image
+        image.paste(overlay, (0, 0), overlay)
 
     def get_distance_to_edge(self, x, y, dx, dy):
         """Calculate the distance from (x, y) to the map edge in direction (dx, dy)"""
@@ -1015,15 +1034,8 @@ class App:
         self.keys_pressed.discard(key)
 
     def on_rotation_key_press(self, key):
-        """Handle rotation key press - rotate one step per press"""
-        # Only rotate if this key wasn't already pressed (prevents continuous rotation)
-        if key not in self.rotation_keys_pressed:
-            self.rotation_keys_pressed.add(key)
-            angle_increment = 360 / SAMPLE_ROTATIONS  # 45 degrees
-            if key == 'j':
-                self.rotate_robot(-angle_increment)
-            elif key == 'l':
-                self.rotate_robot(angle_increment)
+        """Handle rotation key press - allows continuous rotation"""
+        self.rotation_keys_pressed.add(key)
 
     def on_rotation_key_release(self, key):
         """Track when rotation key is released"""
@@ -1033,6 +1045,7 @@ class App:
         """Continuous update loop for smooth movement"""
         # Check which keys are currently pressed and move accordingly
         dx, dy = 0, 0
+        d_angle = 0
 
         if 'w' in self.keys_pressed:
             dy -= self.robot_speed
@@ -1043,9 +1056,19 @@ class App:
         if 'd' in self.keys_pressed:
             dx += self.robot_speed
 
+        # Handle rotation
+        if 'j' in self.rotation_keys_pressed:
+            d_angle -= self.robot_rotation_speed
+        if 'l' in self.rotation_keys_pressed:
+            d_angle += self.robot_rotation_speed
+
         # Update position if there's movement
         if dx != 0 or dy != 0:
             self.move_robot(dx, dy)
+
+        # Update rotation if rotating
+        if d_angle != 0:
+            self.rotate_robot(d_angle)
 
         # Schedule next update
         self.root.after(self.update_interval, self.update_loop)
