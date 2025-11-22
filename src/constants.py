@@ -31,7 +31,7 @@ SAMPLE_UPDATE_FREQUENCY = 100
 
 # Camera preprocessing
 # Gaussian blur radius for camera observations (0 = no blur, 1.0-2.0 recommended)
-CAMERA_BLUR_RADIUS = 1.5
+CAMERA_BLUR_RADIUS = 4.0
 
 # Camera FOV (field of view in degrees)
 CAMERA_FOV = 120  # Default cone angle

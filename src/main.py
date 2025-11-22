@@ -487,9 +487,10 @@ class App:
         self.sample_views = []
         self.clear_sample_dots()
 
-        # Calculate grid positions
-        x_positions = list(range(0, MAP_WIDTH, SAMPLE_STRIDE))
-        y_positions = list(range(0, MAP_HEIGHT, SAMPLE_STRIDE))
+        # Calculate grid positions, offset by half stride
+        half_stride = SAMPLE_STRIDE // 2
+        x_positions = list(range(half_stride, MAP_WIDTH, SAMPLE_STRIDE))
+        y_positions = list(range(half_stride, MAP_HEIGHT, SAMPLE_STRIDE))
 
         # Calculate angles (45-degree increments)
         angles = [i * (360 / SAMPLE_ROTATIONS)
@@ -580,7 +581,7 @@ class App:
         embedding_dim = len(self.sample_embeddings[0])
 
         # Initialize the Hopfield Network
-        self.hopfield_network = ModernHopfieldNetwork(embedding_dim)
+        self.hopfield_network = ModernHopfieldNetwork(embedding_dim, beta=50.0)
 
         # Progress callback for training
         def update_training_progress(current, total):
@@ -657,12 +658,10 @@ class App:
         """Draw red dots at sample positions on the canvas, sized by similarity"""
         self.clear_sample_dots()
 
-        # Find top 5 samples if similarity data is available
-        top_5_indices = set()
+        # Get max similarity for normalization if similarity data is available
+        max_similarity = None
         if self.sample_similarities is not None and len(
                 self.sample_similarities) > 0:
-            # Get indices of top 5 samples
-            top_5_indices = set(np.argsort(self.sample_similarities)[-5:])
             max_similarity = max(self.sample_similarities.max(), 1e-6)
 
         for i, (x, y, _angle) in enumerate(self.sample_positions):
@@ -673,15 +672,10 @@ class App:
                 min_radius = 1
                 max_radius = 5
 
-                # Only scale the top 5 samples linearly, rest stay at min size
-                if i in top_5_indices:
-                    # Linearly scale based on similarity within top 5
-                    normalized_similarity = similarity / max_similarity
-                    dot_radius = min_radius + (
-                        max_radius - min_radius) * normalized_similarity
-                else:
-                    # Keep at minimum size for all other samples
-                    dot_radius = min_radius
+                # Scale all samples linearly based on similarity
+                normalized_similarity = similarity / max_similarity
+                dot_radius = min_radius + (
+                    max_radius - min_radius) * normalized_similarity
             else:
                 # Default radius if no similarity data
                 dot_radius = SAMPLE_DOT_RADIUS
@@ -731,11 +725,10 @@ class App:
         closest_idx = None
         min_distance = 15  # Generous search radius to account for larger dots
 
-        # Find top 5 samples if similarity data is available
-        top_5_indices = set()
+        # Get max similarity for normalization if similarity data is available
+        max_similarity = None
         if self.sample_similarities is not None and len(
                 self.sample_similarities) > 0:
-            top_5_indices = set(np.argsort(self.sample_similarities)[-5:])
             max_similarity = max(self.sample_similarities.max(), 1e-6)
 
         for i, (x, y, _angle) in enumerate(self.sample_positions):
@@ -747,13 +740,10 @@ class App:
                 min_radius = 1
                 max_radius = 5
 
-                # Only scale the top 5 samples, rest stay at min size
-                if i in top_5_indices:
-                    normalized_similarity = similarity / max_similarity
-                    dot_radius = min_radius + (
-                        max_radius - min_radius) * normalized_similarity
-                else:
-                    dot_radius = min_radius
+                # Scale all samples based on similarity
+                normalized_similarity = similarity / max_similarity
+                dot_radius = min_radius + (
+                    max_radius - min_radius) * normalized_similarity
 
                 hover_threshold = dot_radius + 5  # Add some margin
             else:
