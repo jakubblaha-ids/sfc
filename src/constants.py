@@ -15,7 +15,14 @@ COLOR_BUTTON = "#464646"
 COLOR_BUTTON_HOVER = "#5A5A5A"
 COLOR_ROBOT_GT = "#0000FF"  # Blue
 COLOR_ROBOT_EST = "#FF0000"  # Red
+COLOR_SAMPLE_DOT = "#FF0000"  # Red dots for sample positions
 
 # UI Layout
 TOOLBAR_HEIGHT = 40
 PANEL_PADDING = 10
+
+# Sampling parameters
+SAMPLE_STRIDE = 50  # Pixels between sample positions
+# Number of rotations at each position (45-degree increments)
+SAMPLE_ROTATIONS = 8
+SAMPLE_DOT_RADIUS = 3  # Size of the sample position dots

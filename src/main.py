@@ -4,8 +4,10 @@ from constants import *
 from PIL import Image, ImageTk
 from editor import MapEditor
 from config import ConfigManager
+from hopfield import ModernHopfieldNetwork
 import math
 import os
+import numpy as np
 
 
 class App:
@@ -36,6 +38,25 @@ class App:
         # Camera parameters
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
         self.current_camera_view = None  # Store current camera strip
+
+        # Sample memory storage
+        self.sample_positions = []  # List of (x, y, angle) tuples
+        self.sample_embeddings = []  # List of embeddings (numpy arrays)
+        self.sample_views = []  # List of camera view images (PIL Images)
+        self.sample_dots = []  # Canvas IDs of sample dots
+
+        # Modern Hopfield Network
+        self.hopfield_network = None
+        self.is_trained = False
+
+        # Estimated position from localization
+        self.estimated_x = None
+        self.estimated_y = None
+        self.estimated_angle = None
+        self.retrieved_sample_idx = None
+
+        # Hover state
+        self.hovered_sample_idx = None
 
         # Key press tracking for smooth movement
         self.keys_pressed = set()
@@ -84,12 +105,31 @@ class App:
             side=tk.TOP, fill=tk.BOTH, expand=True, padx=PANEL_PADDING,
             pady=PANEL_PADDING)
 
+        # Progress bar area at the bottom
+        self.progress_frame = tk.Frame(self.main_container)
+        self.progress_frame.pack(
+            side=tk.BOTTOM, fill=tk.X, padx=PANEL_PADDING,
+            pady=(0, PANEL_PADDING))
+
+        self.progress_label = tk.Label(
+            self.progress_frame, text="", anchor="w")
+        self.progress_label.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.progress_bar = ttk.Progressbar(
+            self.progress_frame,
+            orient=tk.HORIZONTAL,
+            mode='determinate',
+            length=400
+        )
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
     def create_toolbar(self):
         buttons = {
             "Edit Map": self.open_map_editor,
             "Import Map": self.import_map,
             "Export Map": self.export_map,
-            "Auto Sample": lambda: print("Auto Sample")
+            "Auto Sample": self.auto_sample,
+            "Train": self.train_network
         }
 
         for btn_text, command in buttons.items():
@@ -117,6 +157,9 @@ class App:
         self.map_canvas = tk.Canvas(
             self.left_panel, highlightthickness=1)
         self.map_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Bind mouse motion for hover effects
+        self.map_canvas.bind('<Motion>', self.on_canvas_hover)
 
         # Placeholder text
         self.map_canvas.create_text(
@@ -278,22 +321,236 @@ class App:
                 messagebox.showerror(
                     "Error", f"Failed to export map: {str(e)}")
 
+    def auto_sample(self):
+        """
+        Automatically generate samples from the current map.
+        Samples at discrete positions with SAMPLE_STRIDE spacing and
+        SAMPLE_ROTATIONS rotations at each position.
+        """
+        # Clear existing samples
+        self.sample_positions = []
+        self.sample_embeddings = []
+        self.sample_views = []
+        self.clear_sample_dots()
+
+        # Calculate grid positions
+        x_positions = list(range(0, MAP_WIDTH, SAMPLE_STRIDE))
+        y_positions = list(range(0, MAP_HEIGHT, SAMPLE_STRIDE))
+
+        # Calculate angles (45-degree increments)
+        angles = [i * (360 / SAMPLE_ROTATIONS)
+                  for i in range(SAMPLE_ROTATIONS)]
+
+        # Store original robot state
+        original_x = self.robot_x
+        original_y = self.robot_y
+        original_angle = self.robot_angle
+
+        # Generate samples
+        total_samples = len(x_positions) * len(y_positions) * len(angles)
+        sample_count = 0
+
+        # Initialize progress bar
+        self.progress_bar['maximum'] = total_samples
+        self.progress_bar['value'] = 0
+        self.progress_label['text'] = f"Sampling: 0/{total_samples}"
+
+        for x in x_positions:
+            for y in y_positions:
+                for angle in angles:
+                    # Position robot
+                    self.robot_x = x
+                    self.robot_y = y
+                    self.robot_angle = angle
+
+                    # Capture camera view
+                    self.capture_camera_view()
+
+                    # Create embedding (flatten the RGB values)
+                    embedding = self.create_embedding(self.current_camera_view)
+
+                    # Store sample
+                    self.sample_positions.append((x, y, angle))
+                    self.sample_embeddings.append(embedding)
+                    self.sample_views.append(
+                        self.current_camera_view.copy())
+
+                    sample_count += 1
+
+                    # Update progress bar
+                    if sample_count % 10 == 0 or sample_count == total_samples:
+                        self.progress_bar['value'] = sample_count
+                        self.progress_label['text'] = f"Sampling: {
+                            sample_count} /{total_samples} "
+                        self.root.update()  # Force UI update
+
+        # Restore original robot state
+        self.robot_x = original_x
+        self.robot_y = original_y
+        self.robot_angle = original_angle
+
+        # Update display
+        self.update_map_display()
+        self.draw_sample_dots()
+
+        # Clear progress bar
+        self.progress_bar['value'] = 0
+        self.progress_label['text'] = ""
+
+        messagebox.showinfo("Success",
+                            f"Generated {len(self.sample_positions)} samples")
+
+    def train_network(self):
+        """
+        Train the Modern Hopfield Network using the collected samples.
+        """
+        # Check if samples exist
+        if len(self.sample_embeddings) == 0:
+            messagebox.showerror(
+                "Error",
+                "No samples available. Please run 'Auto Sample' first.")
+            return
+
+        # Get embedding dimension from first sample
+        embedding_dim = len(self.sample_embeddings[0])
+
+        # Initialize the Hopfield Network
+        self.hopfield_network = ModernHopfieldNetwork(embedding_dim)
+
+        # Progress callback for training
+        def update_training_progress(current, total):
+            self.progress_bar['value'] = current
+            self.progress_label['text'] = f"Training: {current}/{total}"
+            self.root.update()  # Force UI update
+
+        # Initialize progress bar
+        self.progress_bar['maximum'] = len(self.sample_embeddings)
+        self.progress_bar['value'] = 0
+        self.progress_label['text'] = f"Training: 0/{
+            len(self.sample_embeddings)} "
+
+        try:
+            # Train the network
+            self.hopfield_network.train(
+                self.sample_embeddings,
+                progress_callback=update_training_progress
+            )
+
+            self.is_trained = True
+
+            # Clear progress bar
+            self.progress_bar['value'] = 0
+            self.progress_label['text'] = ""
+
+            messagebox.showinfo(
+                "Success",
+                f"Network trained with {len(self.sample_embeddings)} patterns")
+
+        except Exception as e:
+            self.progress_bar['value'] = 0
+            self.progress_label['text'] = ""
+            messagebox.showerror(
+                "Training Error", f"Failed to train network: {str(e)}")
+
+    def create_embedding(self, camera_view):
+        """
+        Create an embedding vector from a camera view image.
+        For MVP, we simply flatten the RGB values.
+
+        Args:
+            camera_view: PIL Image (1D strip)
+
+        Returns:
+            numpy array representing the embedding
+        """
+        # Get pixel data
+        pixels = list(camera_view.getdata())
+
+        # Flatten RGB values into a single vector
+        embedding = []
+        for r, g, b in pixels:
+            embedding.extend([r, g, b])
+
+        return np.array(embedding, dtype=np.float32)
+
+    def clear_sample_dots(self):
+        """Remove all sample dots from the canvas"""
+        for dot_id in self.sample_dots:
+            self.map_canvas.delete(dot_id)
+        self.sample_dots = []
+
+    def draw_sample_dots(self):
+        """Draw red dots at sample positions on the canvas"""
+        self.clear_sample_dots()
+
+        for i, (x, y, _angle) in enumerate(self.sample_positions):
+            # Draw a red dot
+            dot_id = self.map_canvas.create_oval(
+                x - SAMPLE_DOT_RADIUS,
+                y - SAMPLE_DOT_RADIUS,
+                x + SAMPLE_DOT_RADIUS,
+                y + SAMPLE_DOT_RADIUS,
+                fill=COLOR_SAMPLE_DOT,
+                outline=COLOR_SAMPLE_DOT,
+                tags=("sample_dot", f"sample_{i}")
+            )
+            self.sample_dots.append(dot_id)
+
+    def on_canvas_hover(self, event):
+        """
+        Handle mouse hover over the canvas.
+        Display the saved sample when hovering over a red dot.
+        """
+        # Find if we're hovering over a sample dot
+        canvas_x = event.x
+        canvas_y = event.y
+
+        # Find the closest sample within a reasonable distance
+        closest_idx = None
+        min_distance = SAMPLE_DOT_RADIUS * 3  # Search radius
+
+        for i, (x, y, _angle) in enumerate(self.sample_positions):
+            distance = math.sqrt((x - canvas_x)**2 + (y - canvas_y)**2)
+            if distance < min_distance:
+                min_distance = distance
+                closest_idx = i
+
+        # If hovering over a new sample, update display
+        if closest_idx != self.hovered_sample_idx:
+            self.hovered_sample_idx = closest_idx
+
+            if closest_idx is not None:
+                # Display the saved sample view
+                self.display_saved_sample(closest_idx)
+            else:
+                # Clear the retrieved memory canvas
+                self.memory_canvas.delete("all")
+
     def update_map_display(self):
         self.tk_map_image = ImageTk.PhotoImage(self.current_map_image)
         self.map_canvas.delete("all")
         self.map_canvas.create_image(
             0, 0, image=self.tk_map_image, anchor="nw")
+
+        # Draw sample dots (behind robot)
+        self.draw_sample_dots()
+
+        # Draw robot on top
         self.draw_robot()
 
         # Update camera view
         self.capture_camera_view()
         self.display_camera_view()
 
+        # Perform localization if network is trained
+        if self.is_trained:
+            self.localize()
+
     def draw_robot(self):
         # Draw the viewing cone first (behind the robot)
         self.draw_viewing_cone()
 
-        # Draw robot as a blue circle on top
+        # Draw robot ground truth as a blue circle
         self.map_canvas.create_oval(
             self.robot_x - self.robot_radius,
             self.robot_y - self.robot_radius,
@@ -303,6 +560,33 @@ class App:
             outline=COLOR_ROBOT_GT,
             tags="robot"
         )
+
+        # Draw estimated position (green circle with purple direction line) last so it's always visible
+        if self.estimated_x is not None and self.estimated_y is not None:
+            # Draw purple direction line
+            if self.estimated_angle is not None:
+                line_length = 20
+                angle_rad = math.radians(self.estimated_angle)
+                end_x = self.estimated_x + line_length * math.cos(angle_rad)
+                end_y = self.estimated_y + line_length * math.sin(angle_rad)
+                self.map_canvas.create_line(
+                    self.estimated_x, self.estimated_y,
+                    end_x, end_y,
+                    fill="#800080",  # Purple
+                    width=2,
+                    tags="estimated_direction"
+                )
+
+            # Draw green circle
+            self.map_canvas.create_oval(
+                self.estimated_x - self.robot_radius,
+                self.estimated_y - self.robot_radius,
+                self.estimated_x + self.robot_radius,
+                self.estimated_y + self.robot_radius,
+                fill="#00FF00",  # Green
+                outline="#00FF00",
+                tags="estimated"
+            )
 
     def draw_viewing_cone(self):
         # Calculate the cone's arc points
@@ -497,6 +781,183 @@ class App:
 
         # Store reference to prevent garbage collection
         self.input_canvas.image = tk_image
+
+    def localize(self):
+        """
+        Perform localization using the trained Hopfield Network.
+        Retrieves the closest matching pattern and estimates the robot's position.
+        """
+        if not self.is_trained or self.hopfield_network is None:
+            return
+
+        if self.current_camera_view is None:
+            return
+
+        try:
+            # Create embedding from current camera view
+            query_embedding = self.create_embedding(self.current_camera_view)
+
+            # Retrieve best matching pattern
+            indices, weights = self.hopfield_network.retrieve(
+                query_embedding, top_k=1)
+            best_idx = indices[0]
+            best_weight = weights[0]
+
+            # Store retrieved sample index
+            self.retrieved_sample_idx = best_idx
+
+            # Get position from the sample
+            x, y, angle = self.sample_positions[best_idx]
+            self.estimated_x = x
+            self.estimated_y = y
+            self.estimated_angle = angle
+
+            # Display the retrieved memory view
+            self.display_retrieved_memory(best_idx, best_weight)
+
+            # Display similarity metric
+            self.display_similarity_metric(best_weight)
+
+        except Exception as e:
+            print(f"Localization error: {e}")
+
+    def display_retrieved_memory(self, sample_idx, weight):
+        """
+        Display the retrieved memory view in the retrieved memory canvas.
+
+        Args:
+            sample_idx: Index of the retrieved sample
+            weight: Attention weight/confidence score
+        """
+        if sample_idx < 0 or sample_idx >= len(self.sample_views):
+            return
+
+        saved_view = self.sample_views[sample_idx]
+
+        # Get canvas dimensions
+        canvas_width = self.memory_canvas.winfo_width()
+        canvas_height = self.memory_canvas.winfo_height()
+
+        # If canvas not yet sized, use default
+        if canvas_width <= 1:
+            canvas_width = 300
+            canvas_height = 100
+
+        # Scale up the 1-pixel-high image to fill the canvas
+        scaled_image = saved_view.resize(
+            (canvas_width, canvas_height),
+            Image.Resampling.NEAREST
+        )
+
+        # Convert to PhotoImage
+        tk_image = ImageTk.PhotoImage(scaled_image)
+
+        # Clear canvas and draw
+        self.memory_canvas.delete("all")
+        self.memory_canvas.create_image(0, 0, image=tk_image, anchor="nw")
+
+        # Add text overlay with position info
+        x, y, angle = self.sample_positions[sample_idx]
+        info_text = f"Retrieved: ({x}, {y}), {
+            angle: .1f} ° | Weight: {
+            weight: .4f} "
+        self.memory_canvas.create_text(
+            canvas_width // 2, 10,
+            text=info_text,
+            fill="white",
+            font=("Arial", 9, "bold")
+        )
+
+        # Store reference to prevent garbage collection
+        self.memory_canvas.image = tk_image
+
+    def display_similarity_metric(self, weight):
+        """
+        Display the similarity metric as a progress bar.
+
+        Args:
+            weight: Attention weight/confidence (0 to 1)
+        """
+        canvas_width = self.sim_canvas.winfo_width()
+        canvas_height = self.sim_canvas.winfo_height()
+
+        if canvas_width <= 1:
+            canvas_width = 300
+            canvas_height = 40
+
+        # Clear canvas
+        self.sim_canvas.delete("all")
+
+        # Draw background bar
+        bar_height = 20
+        bar_y = canvas_height // 2 - bar_height // 2
+        self.sim_canvas.create_rectangle(
+            10, bar_y, canvas_width - 10, bar_y + bar_height,
+            fill="gray", outline="black"
+        )
+
+        # Draw filled bar based on weight
+        bar_width = (canvas_width - 20) * weight
+        self.sim_canvas.create_rectangle(
+            10, bar_y, 10 + bar_width, bar_y + bar_height,
+            fill="green", outline=""
+        )
+
+        # Add text
+        percentage = weight * 100
+        self.sim_canvas.create_text(
+            canvas_width // 2, bar_y + bar_height // 2,
+            text=f"Confidence: {percentage:.1f}%",
+            fill="white",
+            font=("Arial", 10, "bold")
+        )
+
+    def display_saved_sample(self, sample_idx):
+        """
+        Display a saved sample view in the retrieved memory canvas.
+
+        Args:
+            sample_idx: Index of the sample to display
+        """
+        if sample_idx < 0 or sample_idx >= len(self.sample_views):
+            return
+
+        saved_view = self.sample_views[sample_idx]
+
+        # Get canvas dimensions
+        canvas_width = self.memory_canvas.winfo_width()
+        canvas_height = self.memory_canvas.winfo_height()
+
+        # If canvas not yet sized, use default
+        if canvas_width <= 1:
+            canvas_width = 300
+            canvas_height = 100
+
+        # Scale up the 1-pixel-high image to fill the canvas
+        scaled_image = saved_view.resize(
+            (canvas_width, canvas_height),
+            Image.Resampling.NEAREST  # Use nearest neighbor to keep sharp pixels
+        )
+
+        # Convert to PhotoImage
+        tk_image = ImageTk.PhotoImage(scaled_image)
+
+        # Clear canvas and draw
+        self.memory_canvas.delete("all")
+        self.memory_canvas.create_image(0, 0, image=tk_image, anchor="nw")
+
+        # Add text overlay with position info
+        x, y, angle = self.sample_positions[sample_idx]
+        info_text = f"Pos: ({x}, {y}), Angle: {angle:.1f}°"
+        self.memory_canvas.create_text(
+            canvas_width // 2, 10,
+            text=info_text,
+            fill="white",
+            font=("Arial", 10, "bold")
+        )
+
+        # Store reference to prevent garbage collection
+        self.memory_canvas.image = tk_image
 
     def move_robot(self, dx, dy):
         # Update robot position
