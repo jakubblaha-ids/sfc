@@ -1,8 +1,11 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 from constants import *
 from PIL import Image, ImageTk
 from editor import MapEditor
+from config import ConfigManager
+import math
+import os
 
 
 class App:
@@ -10,6 +13,9 @@ class App:
         self.root = tk.Tk()
         self.root.title("Robot Localization via Modern Hopfield Networks")
         self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+
+        # Configuration manager
+        self.config = ConfigManager()
 
         # Map Data
         self.current_map_image = Image.new(
@@ -21,6 +27,11 @@ class App:
         self.robot_y = MAP_HEIGHT // 2
         self.robot_radius = 5
         self.robot_speed = 5
+        # Angle in degrees (0 = right, 90 = down, 180 = left, 270 = up)
+        self.robot_angle = 0
+        self.robot_rotation_speed = 15  # Degrees per key press
+        self.cone_length = 40  # Length of the viewing cone
+        self.cone_angle = 90  # Cone angle in degrees
 
         # Configure styles
         self.style = ttk.Style()
@@ -31,6 +42,9 @@ class App:
         self.create_left_panel()
         self.create_right_panel()
 
+        # Load last used map if available
+        self.load_last_map()
+
         # Bind keyboard controls
         self.root.bind(
             '<KeyPress-w>', lambda e: self.move_robot(0, -self.robot_speed))
@@ -40,6 +54,10 @@ class App:
             '<KeyPress-s>', lambda e: self.move_robot(0, self.robot_speed))
         self.root.bind(
             '<KeyPress-d>', lambda e: self.move_robot(self.robot_speed, 0))
+        self.root.bind('<KeyPress-j>',
+                       lambda e: self.rotate_robot(-self.robot_rotation_speed))
+        self.root.bind('<KeyPress-l>',
+                       lambda e: self.rotate_robot(self.robot_rotation_speed))
 
     def create_layout(self):
         # Main container
@@ -61,8 +79,8 @@ class App:
     def create_toolbar(self):
         buttons = {
             "Edit Map": self.open_map_editor,
-            "Import Map": lambda: print("Import Map"),
-            "Export Map": lambda: print("Export Map"),
+            "Import Map": self.import_map,
+            "Export Map": self.export_map,
             "Auto Sample": lambda: print("Auto Sample")
         }
 
@@ -148,6 +166,110 @@ class App:
         self.current_map_image = new_map_image
         self.update_map_display()
 
+    def load_last_map(self):
+        """Load the last used map automatically on startup"""
+        last_path = self.config.get_last_map_path()
+
+        if last_path and os.path.exists(last_path):
+            try:
+                # Load the image
+                imported_image = Image.open(last_path)
+
+                # Resize to map dimensions if necessary
+                if imported_image.size != (MAP_WIDTH, MAP_HEIGHT):
+                    imported_image = imported_image.resize(
+                        (MAP_WIDTH, MAP_HEIGHT),
+                        Image.Resampling.LANCZOS
+                    )
+
+                # Convert to RGB if necessary
+                if imported_image.mode != "RGB":
+                    imported_image = imported_image.convert("RGB")
+
+                self.current_map_image = imported_image
+                print(f"Loaded last map: {last_path}")
+
+            except Exception as e:
+                print(f"Failed to load last map: {e}")
+                # Keep the default white map
+
+    def import_map(self):
+        """Import a map from a PNG file"""
+        # Get initial directory from last used path
+        initial_dir = None
+        last_path = self.config.get_last_map_path()
+        if last_path and os.path.exists(os.path.dirname(last_path)):
+            initial_dir = os.path.dirname(last_path)
+
+        file_path = filedialog.askopenfilename(
+            title="Import Map",
+            initialdir=initial_dir,
+            filetypes=[
+                ("PNG files", "*.png")
+            ]
+        )
+
+        if file_path:
+            try:
+                # Load the image
+                imported_image = Image.open(file_path)
+
+                # Resize to map dimensions if necessary
+                if imported_image.size != (MAP_WIDTH, MAP_HEIGHT):
+                    imported_image = imported_image.resize(
+                        (MAP_WIDTH, MAP_HEIGHT),
+                        Image.Resampling.LANCZOS
+                    )
+
+                # Convert to RGB if necessary
+                if imported_image.mode != "RGB":
+                    imported_image = imported_image.convert("RGB")
+
+                self.current_map_image = imported_image
+                self.update_map_display()
+
+                # Save the path to config
+                self.config.set_last_map_path(file_path)
+
+                messagebox.showinfo("Success", "Map imported successfully!")
+
+            except Exception as e:
+                messagebox.showerror(
+                    "Error", f"Failed to import map: {str(e)}")
+
+    def export_map(self):
+        """Export the current map to a PNG file"""
+        # Get initial directory from last used path
+        initial_dir = None
+        initial_file = "map.png"
+        last_path = self.config.get_last_map_path()
+        if last_path:
+            if os.path.exists(os.path.dirname(last_path)):
+                initial_dir = os.path.dirname(last_path)
+            initial_file = os.path.basename(last_path)
+
+        file_path = filedialog.asksaveasfilename(
+            title="Export Map",
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            defaultextension=".png",
+            filetypes=[
+                ("PNG files", "*.png")
+            ]
+        )
+
+        if file_path:
+            try:
+                self.current_map_image.save(file_path)
+
+                # Save the path to config
+                self.config.set_last_map_path(file_path)
+
+                messagebox.showinfo("Success", f"Map exported to {file_path}")
+            except Exception as e:
+                messagebox.showerror(
+                    "Error", f"Failed to export map: {str(e)}")
+
     def update_map_display(self):
         self.tk_map_image = ImageTk.PhotoImage(self.current_map_image)
         self.map_canvas.delete("all")
@@ -156,7 +278,10 @@ class App:
         self.draw_robot()
 
     def draw_robot(self):
-        # Draw robot as a blue circle
+        # Draw the viewing cone first (behind the robot)
+        self.draw_viewing_cone()
+
+        # Draw robot as a blue circle on top
         self.map_canvas.create_oval(
             self.robot_x - self.robot_radius,
             self.robot_y - self.robot_radius,
@@ -166,6 +291,70 @@ class App:
             outline=COLOR_ROBOT_GT,
             tags="robot"
         )
+
+    def draw_viewing_cone(self):
+        # Calculate the cone's arc points
+        half_cone = self.cone_angle / 2
+
+        # Starting point is the robot center
+        points = [self.robot_x, self.robot_y]
+
+        # Create the cone arc
+        # Add points along the arc from -half_cone to +half_cone
+        num_points = 20
+        for i in range(num_points + 1):
+            angle_offset = -half_cone + (self.cone_angle * i / num_points)
+            current_angle = math.radians(self.robot_angle + angle_offset)
+
+            # Calculate direction vector
+            dx = math.cos(current_angle)
+            dy = math.sin(current_angle)
+
+            # Calculate maximum distance to map edge in this direction
+            max_distance = self.get_distance_to_edge(
+                self.robot_x, self.robot_y, dx, dy)
+
+            x = self.robot_x + max_distance * dx
+            y = self.robot_y + max_distance * dy
+            points.extend([x, y])
+
+        # Close the polygon back to the center
+        points.extend([self.robot_x, self.robot_y])
+
+        # Draw the cone with semi-transparent blue
+        self.map_canvas.create_polygon(
+            points,
+            fill=COLOR_ROBOT_GT,
+            stipple="gray50",  # Makes it semi-transparent
+            outline=COLOR_ROBOT_GT,
+            tags="cone"
+        )
+
+    def get_distance_to_edge(self, x, y, dx, dy):
+        """Calculate the distance from (x, y) to the map edge in direction (dx, dy)"""
+        # Calculate distances to each edge
+        distances = []
+
+        # Right edge (x = MAP_WIDTH)
+        if dx > 0:
+            t = (MAP_WIDTH - x) / dx
+            distances.append(t)
+        # Left edge (x = 0)
+        elif dx < 0:
+            t = -x / dx
+            distances.append(t)
+
+        # Bottom edge (y = MAP_HEIGHT)
+        if dy > 0:
+            t = (MAP_HEIGHT - y) / dy
+            distances.append(t)
+        # Top edge (y = 0)
+        elif dy < 0:
+            t = -y / dy
+            distances.append(t)
+
+        # Return the minimum positive distance
+        return min(distances) if distances else 0
 
     def move_robot(self, dx, dy):
         # Update robot position
@@ -179,6 +368,15 @@ class App:
             MAP_HEIGHT - self.robot_radius, self.robot_y))
 
         # Redraw the map with the robot at new position
+        self.update_map_display()
+
+    def rotate_robot(self, angle_delta):
+        # Update robot angle
+        self.robot_angle += angle_delta
+        # Keep angle in [0, 360) range
+        self.robot_angle = self.robot_angle % 360
+
+        # Redraw the map with the robot at new angle
         self.update_map_display()
 
     def run(self):
