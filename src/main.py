@@ -29,7 +29,7 @@ class App:
         self.robot_speed = 5
         # Angle in degrees (0 = right, 90 = down, 180 = left, 270 = up)
         self.robot_angle = 0
-        self.robot_rotation_speed = 15  # Degrees per key press
+        self.robot_rotation_speed = 7.5  # Degrees per key press
         self.cone_length = 40  # Length of the viewing cone
         self.cone_angle = 90  # Cone angle in degrees
 
@@ -310,12 +310,12 @@ class App:
             dx = math.cos(current_angle)
             dy = math.sin(current_angle)
 
-            # Calculate maximum distance to map edge in this direction
-            max_distance = self.get_distance_to_edge(
+            # Cast ray and find distance to wall or edge
+            distance = self.cast_ray(
                 self.robot_x, self.robot_y, dx, dy)
 
-            x = self.robot_x + max_distance * dx
-            y = self.robot_y + max_distance * dy
+            x = self.robot_x + distance * dx
+            y = self.robot_y + distance * dy
             points.extend([x, y])
 
         # Close the polygon back to the center
@@ -355,6 +355,47 @@ class App:
 
         # Return the minimum positive distance
         return min(distances) if distances else 0
+
+    def cast_ray(self, x, y, dx, dy):
+        """
+        Cast a ray from (x, y) in direction (dx, dy) until hitting a wall or map edge.
+        Returns the distance to the first obstacle.
+        """
+        # Get maximum possible distance (to map edge)
+        max_distance = self.get_distance_to_edge(x, y, dx, dy)
+
+        # Step size for ray marching (smaller = more accurate but slower)
+        step_size = 1.0
+
+        # Get pixel data from the map image
+        pixels = self.current_map_image.load()
+
+        # March along the ray
+        distance = 0
+        while distance < max_distance:
+            distance += step_size
+
+            # Calculate current position
+            current_x = x + distance * dx
+            current_y = y + distance * dy
+
+            # Round to integer pixel coordinates
+            pixel_x = int(round(current_x))
+            pixel_y = int(round(current_y))
+
+            # Check if we're out of bounds (shouldn't happen, but safety check)
+            if pixel_x < 0 or pixel_x >= MAP_WIDTH or pixel_y < 0 or pixel_y >= MAP_HEIGHT:
+                return distance
+
+            # Get pixel color
+            pixel_color = pixels[pixel_x, pixel_y]
+
+            # Check if pixel is black (wall) - threshold for near-black pixels
+            # RGB values less than 50 are considered walls
+            if pixel_color[0] < 50 and pixel_color[1] < 50 and pixel_color[2] < 50:
+                return distance
+
+        return max_distance
 
     def move_robot(self, dx, dy):
         # Update robot position
