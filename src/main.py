@@ -62,6 +62,9 @@ class App:
         self.keys_pressed = set()
         self.update_interval = 16  # ~60 FPS (16ms per frame)
 
+        # Rotation tracking to prevent continuous rotation
+        self.rotation_keys_pressed = set()
+
         # Configure styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
@@ -83,10 +86,14 @@ class App:
         self.root.bind('<KeyRelease-s>', lambda e: self.on_key_release('s'))
         self.root.bind('<KeyPress-d>', lambda e: self.on_key_press('d'))
         self.root.bind('<KeyRelease-d>', lambda e: self.on_key_release('d'))
-        self.root.bind('<KeyPress-j>', lambda e: self.on_key_press('j'))
-        self.root.bind('<KeyRelease-j>', lambda e: self.on_key_release('j'))
-        self.root.bind('<KeyPress-l>', lambda e: self.on_key_press('l'))
-        self.root.bind('<KeyRelease-l>', lambda e: self.on_key_release('l'))
+        self.root.bind(
+            '<KeyPress-j>', lambda e: self.on_rotation_key_press('j'))
+        self.root.bind('<KeyRelease-j>',
+                       lambda e: self.on_rotation_key_release('j'))
+        self.root.bind(
+            '<KeyPress-l>', lambda e: self.on_rotation_key_press('l'))
+        self.root.bind('<KeyRelease-l>',
+                       lambda e: self.on_rotation_key_release('l'))
 
     def create_layout(self):
         # Main container
@@ -535,9 +542,6 @@ class App:
         # Draw sample dots (behind robot)
         self.draw_sample_dots()
 
-        # Draw robot on top
-        self.draw_robot()
-
         # Update camera view
         self.capture_camera_view()
         self.display_camera_view()
@@ -545,6 +549,9 @@ class App:
         # Perform localization if network is trained
         if self.is_trained:
             self.localize()
+
+        # Draw robot on top (after localization so estimated angle is current)
+        self.draw_robot()
 
     def draw_robot(self):
         # Draw the viewing cone first (behind the robot)
@@ -974,7 +981,7 @@ class App:
         self.update_map_display()
 
     def rotate_robot(self, angle_delta):
-        # Update robot angle
+        # Update robot angle by the specified delta (already a discrete step)
         self.robot_angle += angle_delta
         # Keep angle in [0, 360) range
         self.robot_angle = self.robot_angle % 360
@@ -990,11 +997,25 @@ class App:
         """Track when a key is released"""
         self.keys_pressed.discard(key)
 
+    def on_rotation_key_press(self, key):
+        """Handle rotation key press - rotate one step per press"""
+        # Only rotate if this key wasn't already pressed (prevents continuous rotation)
+        if key not in self.rotation_keys_pressed:
+            self.rotation_keys_pressed.add(key)
+            angle_increment = 360 / SAMPLE_ROTATIONS  # 45 degrees
+            if key == 'j':
+                self.rotate_robot(-angle_increment)
+            elif key == 'l':
+                self.rotate_robot(angle_increment)
+
+    def on_rotation_key_release(self, key):
+        """Track when rotation key is released"""
+        self.rotation_keys_pressed.discard(key)
+
     def update_loop(self):
         """Continuous update loop for smooth movement"""
         # Check which keys are currently pressed and move accordingly
         dx, dy = 0, 0
-        angle_delta = 0
 
         if 'w' in self.keys_pressed:
             dy -= self.robot_speed
@@ -1004,18 +1025,10 @@ class App:
             dx -= self.robot_speed
         if 'd' in self.keys_pressed:
             dx += self.robot_speed
-        if 'j' in self.keys_pressed:
-            angle_delta -= self.robot_rotation_speed
-        if 'l' in self.keys_pressed:
-            angle_delta += self.robot_rotation_speed
 
         # Update position if there's movement
         if dx != 0 or dy != 0:
             self.move_robot(dx, dy)
-
-        # Update rotation if there's rotation
-        if angle_delta != 0:
-            self.rotate_robot(angle_delta)
 
         # Schedule next update
         self.root.after(self.update_interval, self.update_loop)
