@@ -86,6 +86,11 @@ class App:
         # Rotation tracking to prevent continuous rotation
         self.rotation_keys_pressed = set()
 
+        # Canvas scaling parameters
+        self.map_scale_factor = 1.0
+        self.map_offset_x = 0
+        self.map_offset_y = 0
+
         # Configure styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
@@ -124,10 +129,9 @@ class App:
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
         # Toolbar area
-        self.toolbar_frame = tk.Frame(
-            self.main_container, height=TOOLBAR_HEIGHT)
-        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X)
-        self.toolbar_frame.pack_propagate(False)  # Prevent shrinking
+        self.toolbar_frame = ttk.Frame(self.main_container)
+        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X,
+                                padx=PANEL_PADDING, pady=(PANEL_PADDING, 0))
 
         # Content area
         self.content_frame = ttk.Frame(self.main_container)
@@ -136,12 +140,12 @@ class App:
             pady=PANEL_PADDING)
 
         # Progress bar area at the bottom
-        self.progress_frame = tk.Frame(self.main_container)
+        self.progress_frame = ttk.Frame(self.main_container)
         self.progress_frame.pack(
             side=tk.BOTTOM, fill=tk.X, padx=PANEL_PADDING,
             pady=(0, PANEL_PADDING))
 
-        self.progress_label = tk.Label(
+        self.progress_label = ttk.Label(
             self.progress_frame, text="", anchor="w")
         self.progress_label.pack(side=tk.LEFT, padx=(0, 10))
 
@@ -162,7 +166,7 @@ class App:
         }
 
         for btn_text, command in buttons.items():
-            btn = tk.Button(
+            btn = ttk.Button(
                 self.toolbar_frame,
                 text=btn_text,
                 command=command
@@ -171,21 +175,23 @@ class App:
 
     def create_left_panel(self):
         # Left Panel Container (half the window width)
-        self.left_panel = tk.Frame(self.content_frame)
+        self.left_panel = ttk.Frame(self.content_frame)
         self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Label
-        lbl = tk.Label(
-            self.left_panel, text="World View (God Mode)")
+        lbl = ttk.Label(
+            self.left_panel, text="World View (God Mode)",
+            font=("Arial", 12, "bold"))
         lbl.pack(side=tk.TOP, pady=5)
 
         # Canvas for Map
         self.map_canvas = tk.Canvas(
-            self.left_panel, highlightthickness=1)
+            self.left_panel, highlightthickness=1, bg="#f0f0f0")
         self.map_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Bind mouse motion for hover effects
+        # Bind mouse motion for hover effects and canvas resize
         self.map_canvas.bind('<Motion>', self.on_canvas_hover)
+        self.map_canvas.bind('<Configure>', self.on_map_canvas_resize)
 
         # Placeholder text
         self.map_canvas.create_text(
@@ -194,132 +200,116 @@ class App:
             fill="gray")
 
     def create_right_panel(self):
-        # Right Panel Container (fixed width of 200 pixels)
-        self.right_panel = tk.Frame(self.content_frame, width=400)
+        # Right Panel Container (fixed width of 400 pixels)
+        self.right_panel = ttk.Frame(self.content_frame, width=400)
         self.right_panel.pack(side=tk.LEFT, fill=tk.Y,
                               expand=False, padx=(PANEL_PADDING, 0))
         self.right_panel.pack_propagate(False)
 
         # Label
-        lbl = tk.Label(self.right_panel, text="Robot Perception",
-                       font=("Arial", 12, "bold"))
+        lbl = ttk.Label(self.right_panel, text="Robot Perception",
+                        font=("Arial", 12, "bold"))
         lbl.pack(side=tk.TOP, pady=10)
 
         # 1. Current Input
-        input_frame = tk.Frame(self.right_panel)
+        input_frame = ttk.LabelFrame(
+            self.right_panel, text="Current Input", padding=5)
         input_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        tk.Label(
-            input_frame, text="Current Input").pack(
-            anchor="w")
         self.input_canvas = tk.Canvas(
-            input_frame, height=100, highlightthickness=0)
+            input_frame, height=100, highlightthickness=0, bg="#f0f0f0")
         self.input_canvas.pack(fill=tk.X, pady=(5, 0))
 
         # 2. Retrieved Memory
-        memory_frame = tk.Frame(self.right_panel)
+        memory_frame = ttk.LabelFrame(
+            self.right_panel, text="Retrieved Memory", padding=5)
         memory_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        tk.Label(
-            memory_frame, text="Retrieved Memory").pack(
-            anchor="w")
         self.memory_canvas = tk.Canvas(
-            memory_frame, height=100, highlightthickness=0)
+            memory_frame, height=100, highlightthickness=0, bg="#f0f0f0")
         self.memory_canvas.pack(fill=tk.X, pady=(5, 0))
 
         # 3. Similarity Metric
-        sim_frame = tk.Frame(self.right_panel)
+        sim_frame = ttk.LabelFrame(
+            self.right_panel, text="Similarity Metric", padding=5)
         sim_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        tk.Label(
-            sim_frame, text="Similarity Metric").pack(
-            anchor="w")
         self.sim_canvas = tk.Canvas(
-            sim_frame, height=40, highlightthickness=0)
+            sim_frame, height=40, highlightthickness=0, bg="#f0f0f0")
         self.sim_canvas.pack(fill=tk.X, pady=(5, 0))
 
         # 4. Camera Settings
-        settings_frame = tk.Frame(self.right_panel)
+        settings_frame = ttk.LabelFrame(
+            self.right_panel, text="Camera Settings", padding=10)
         settings_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        tk.Label(
-            settings_frame, text="Camera Settings",
-            font=("Arial", 10, "bold")).pack(
-            anchor="w", pady=(0, 5))
-
         # Blur slider
-        blur_container = tk.Frame(settings_frame)
+        blur_container = ttk.Frame(settings_frame)
         blur_container.pack(fill=tk.X, pady=5)
 
-        blur_label_frame = tk.Frame(blur_container)
+        blur_label_frame = ttk.Frame(blur_container)
         blur_label_frame.pack(fill=tk.X)
 
-        tk.Label(blur_label_frame, text="Blur Radius:").pack(side=tk.LEFT)
-        self.blur_value_label = tk.Label(
+        ttk.Label(blur_label_frame, text="Blur Radius:").pack(side=tk.LEFT)
+        self.blur_value_label = ttk.Label(
             blur_label_frame, text=f"{self.camera_blur_radius:.1f}")
         self.blur_value_label.pack(side=tk.LEFT, padx=5)
 
-        self.blur_slider = tk.Scale(
+        self.blur_slider = ttk.Scale(
             blur_container,
             from_=0.0,
             to=5.0,
-            resolution=0.1,
             orient=tk.HORIZONTAL,
-            command=self.on_blur_change,
-            showvalue=False
+            command=self.on_blur_change
         )
         self.blur_slider.set(self.camera_blur_radius)
-        self.blur_slider.pack(fill=tk.X)
+        self.blur_slider.pack(fill=tk.X, pady=(5, 0))
 
         # FOV slider
-        fov_container = tk.Frame(settings_frame)
+        fov_container = ttk.Frame(settings_frame)
         fov_container.pack(fill=tk.X, pady=5)
 
-        fov_label_frame = tk.Frame(fov_container)
+        fov_label_frame = ttk.Frame(fov_container)
         fov_label_frame.pack(fill=tk.X)
 
-        tk.Label(fov_label_frame, text="Field of View:").pack(side=tk.LEFT)
-        self.fov_value_label = tk.Label(
+        ttk.Label(fov_label_frame, text="Field of View:").pack(side=tk.LEFT)
+        self.fov_value_label = ttk.Label(
             fov_label_frame, text=f"{self.cone_angle:.0f}°")
         self.fov_value_label.pack(side=tk.LEFT, padx=5)
 
-        self.fov_slider = tk.Scale(
+        self.fov_slider = ttk.Scale(
             fov_container,
             from_=30,
             to=360,
-            resolution=5,
             orient=tk.HORIZONTAL,
-            command=self.on_fov_change,
-            showvalue=False
+            command=self.on_fov_change
         )
         self.fov_slider.set(self.cone_angle)
-        self.fov_slider.pack(fill=tk.X)
+        self.fov_slider.pack(fill=tk.X, pady=(5, 0))
 
         # Visibility Index slider
-        visibility_container = tk.Frame(settings_frame)
+        visibility_container = ttk.Frame(settings_frame)
         visibility_container.pack(fill=tk.X, pady=5)
 
-        visibility_label_frame = tk.Frame(visibility_container)
+        visibility_label_frame = ttk.Frame(visibility_container)
         visibility_label_frame.pack(fill=tk.X)
 
-        tk.Label(
+        ttk.Label(
             visibility_label_frame, text="Visibility Index:").pack(
             side=tk.LEFT)
-        self.visibility_value_label = tk.Label(
+        self.visibility_value_label = ttk.Label(
             visibility_label_frame, text=f"{self.visibility_index:.2f}")
         self.visibility_value_label.pack(side=tk.LEFT, padx=5)
 
-        self.visibility_slider = tk.Scale(
+        self.visibility_slider = ttk.Scale(
             visibility_container,
             from_=0.01,
             to=1.0,
-            resolution=0.01,
             orient=tk.HORIZONTAL,
-            command=self.on_visibility_change,
-            showvalue=False
+            command=self.on_visibility_change
         )
         self.visibility_slider.set(self.visibility_index)
-        self.visibility_slider.pack(fill=tk.X)
+        self.visibility_slider.pack(fill=tk.X, pady=(5, 0))
 
     def on_blur_change(self, value):
         """Handle blur slider change"""
@@ -470,11 +460,11 @@ class App:
         """
         # First, run sampling
         self.auto_sample(show_message=False)
-        
+
         # Then, train the network if sampling was successful
         if len(self.sample_embeddings) > 0:
             self.train_network(show_message=False)
-            
+
             # Show combined success message
             if self.is_trained:
                 messagebox.showinfo(
@@ -487,7 +477,7 @@ class App:
         Automatically generate samples from the current map.
         Samples at discrete positions with SAMPLE_STRIDE spacing and
         SAMPLE_ROTATIONS rotations at each position.
-        
+
         Args:
             show_message: Whether to show success message (default True)
         """
@@ -569,13 +559,13 @@ class App:
         self.progress_label['text'] = ""
 
         if show_message:
-            messagebox.showinfo("Success",
-                                f"Generated {len(self.sample_positions)} samples")
+            messagebox.showinfo(
+                "Success", f"Generated {len(self.sample_positions)} samples")
 
     def train_network(self, show_message=True):
         """
         Train the Modern Hopfield Network using the collected samples.
-        
+
         Args:
             show_message: Whether to show success message (default True)
         """
@@ -696,26 +686,46 @@ class App:
                 # Default radius if no similarity data
                 dot_radius = SAMPLE_DOT_RADIUS
 
+            # Convert to canvas coordinates
+            canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
+            scaled_radius = dot_radius * self.map_scale_factor
+
             # Draw a red square (replaces previous circle/oval)
             dot_id = self.map_canvas.create_rectangle(
-                x - dot_radius,
-                y - dot_radius,
-                x + dot_radius,
-                y + dot_radius,
+                canvas_x - scaled_radius,
+                canvas_y - scaled_radius,
+                canvas_x + scaled_radius,
+                canvas_y + scaled_radius,
                 fill=COLOR_SAMPLE_DOT,
                 outline=COLOR_SAMPLE_DOT,
                 tags=("sample_dot", f"sample_{i}")
             )
             self.sample_dots.append(dot_id)
 
+    def on_map_canvas_resize(self, event):
+        """Handle map canvas resize and update display"""
+        # Recalculate scaling factor when canvas size changes
+        self.update_map_display()
+
+    def canvas_to_image_coords(self, canvas_x, canvas_y):
+        """Convert canvas coordinates to image coordinates"""
+        img_x = (canvas_x - self.map_offset_x) / self.map_scale_factor
+        img_y = (canvas_y - self.map_offset_y) / self.map_scale_factor
+        return img_x, img_y
+
+    def image_to_canvas_coords(self, img_x, img_y):
+        """Convert image coordinates to canvas coordinates"""
+        canvas_x = img_x * self.map_scale_factor + self.map_offset_x
+        canvas_y = img_y * self.map_scale_factor + self.map_offset_y
+        return canvas_x, canvas_y
+
     def on_canvas_hover(self, event):
         """
         Handle mouse hover over the canvas.
         Display the saved sample when hovering over a red dot.
         """
-        # Find if we're hovering over a sample dot
-        canvas_x = event.x
-        canvas_y = event.y
+        # Convert canvas coordinates to image coordinates
+        img_x, img_y = self.canvas_to_image_coords(event.x, event.y)
 
         # Find the closest sample within a reasonable distance
         closest_idx = None
@@ -729,7 +739,7 @@ class App:
             max_similarity = max(self.sample_similarities.max(), 1e-6)
 
         for i, (x, y, _angle) in enumerate(self.sample_positions):
-            distance = math.sqrt((x - canvas_x)**2 + (y - canvas_y)**2)
+            distance = math.sqrt((x - img_x)**2 + (y - img_y)**2)
             # Calculate the actual radius of this dot if similarity data exists
             if self.sample_similarities is not None and i < len(
                     self.sample_similarities):
@@ -772,10 +782,8 @@ class App:
         # Draw the viewing cone with transparency on the image
         self.draw_viewing_cone_on_image(display_image)
 
-        self.tk_map_image = ImageTk.PhotoImage(display_image)
-        self.map_canvas.delete("all")
-        self.map_canvas.create_image(
-            0, 0, image=self.tk_map_image, anchor="nw")
+        # Scale and display the image
+        self._display_scaled_map_image(display_image)
 
         # Draw existing sample dots
         self.draw_sample_dots()
@@ -786,6 +794,48 @@ class App:
         # Display current camera view
         self.display_camera_view()
 
+    def _display_scaled_map_image(self, display_image):
+        """Scale and display the map image to fit canvas width while maintaining aspect ratio"""
+        # Get canvas dimensions
+        canvas_width = self.map_canvas.winfo_width()
+        canvas_height = self.map_canvas.winfo_height()
+
+        # If canvas not yet sized, use original image
+        if canvas_width <= 1 or canvas_height <= 1:
+            self.tk_map_image = ImageTk.PhotoImage(display_image)
+            self.map_canvas.delete("all")
+            self.map_canvas.create_image(
+                0, 0, image=self.tk_map_image, anchor="nw")
+            return
+
+        # Calculate scale factor to fit while maintaining aspect ratio
+        img_width, img_height = display_image.size
+        width_scale = canvas_width / img_width
+        height_scale = canvas_height / img_height
+
+        # Use the smaller scale to ensure image fits
+        self.map_scale_factor = min(width_scale, height_scale)
+
+        # Calculate new dimensions
+        new_width = int(img_width * self.map_scale_factor)
+        new_height = int(img_height * self.map_scale_factor)
+
+        # Calculate offset to center the image
+        self.map_offset_x = (canvas_width - new_width) / 2
+        self.map_offset_y = (canvas_height - new_height) / 2
+
+        # Scale the image
+        scaled_image = display_image.resize(
+            (new_width, new_height),
+            Image.Resampling.LANCZOS)
+        self.tk_map_image = ImageTk.PhotoImage(scaled_image)
+
+        # Clear and redraw
+        self.map_canvas.delete("all")
+        self.map_canvas.create_image(
+            self.map_offset_x, self.map_offset_y, image=self.tk_map_image,
+            anchor="nw")
+
     def update_map_display(self):
         # Create a copy of the map to draw on
         display_image = self.current_map_image.copy()
@@ -793,10 +843,8 @@ class App:
         # Draw the viewing cone with transparency on the image
         self.draw_viewing_cone_on_image(display_image)
 
-        self.tk_map_image = ImageTk.PhotoImage(display_image)
-        self.map_canvas.delete("all")
-        self.map_canvas.create_image(
-            0, 0, image=self.tk_map_image, anchor="nw")
+        # Scale and display the image
+        self._display_scaled_map_image(display_image)
 
         # Update camera view
         self.capture_camera_view()
@@ -813,6 +861,11 @@ class App:
         self.draw_robot()
 
     def draw_robot(self):
+        # Convert robot position to canvas coordinates
+        canvas_robot_x, canvas_robot_y = self.image_to_canvas_coords(
+            self.robot_x, self.robot_y)
+        scaled_radius = self.robot_radius * self.map_scale_factor
+
         # Draw robot ground truth as image
         if self.robot_image is not None:
             # Rotate the image according to robot angle
@@ -820,8 +873,8 @@ class App:
             rotated_image = self.robot_image.rotate(
                 -self.robot_angle, expand=True)
 
-            # Resize to appropriate size (e.g., 30x30 pixels)
-            robot_size = 100
+            # Resize to appropriate size, scaled for canvas
+            robot_size = int(100 * self.map_scale_factor)
             rotated_image = rotated_image.resize(
                 (robot_size, robot_size),
                 Image.Resampling.LANCZOS)
@@ -831,7 +884,7 @@ class App:
 
             # Draw image centered on robot position
             self.map_canvas.create_image(
-                self.robot_x, self.robot_y,
+                canvas_robot_x, canvas_robot_y,
                 image=self.tk_robot_image,
                 anchor="center",
                 tags="robot"
@@ -839,10 +892,10 @@ class App:
         else:
             # Fallback: Draw robot ground truth as a blue circle if image not loaded
             self.map_canvas.create_oval(
-                self.robot_x - self.robot_radius,
-                self.robot_y - self.robot_radius,
-                self.robot_x + self.robot_radius,
-                self.robot_y + self.robot_radius,
+                canvas_robot_x - scaled_radius,
+                canvas_robot_y - scaled_radius,
+                canvas_robot_x + scaled_radius,
+                canvas_robot_y + scaled_radius,
                 fill=COLOR_ROBOT_GT,
                 outline=COLOR_ROBOT_GT,
                 tags="robot"
@@ -850,26 +903,30 @@ class App:
 
         # Draw estimated position (green circle with purple direction line) last so it's always visible
         if self.estimated_x is not None and self.estimated_y is not None:
+            # Convert estimated position to canvas coordinates
+            canvas_est_x, canvas_est_y = self.image_to_canvas_coords(
+                self.estimated_x, self.estimated_y)
+
             # Draw purple direction line
             if self.estimated_angle is not None:
-                line_length = 20
+                line_length = 20 * self.map_scale_factor
                 angle_rad = math.radians(self.estimated_angle)
-                end_x = self.estimated_x + line_length * math.cos(angle_rad)
-                end_y = self.estimated_y + line_length * math.sin(angle_rad)
+                end_x = canvas_est_x + line_length * math.cos(angle_rad)
+                end_y = canvas_est_y + line_length * math.sin(angle_rad)
                 self.map_canvas.create_line(
-                    self.estimated_x, self.estimated_y,
+                    canvas_est_x, canvas_est_y,
                     end_x, end_y,
                     fill="#800080",  # Purple
-                    width=2,
+                    width=max(2, int(2 * self.map_scale_factor)),
                     tags="estimated_direction"
                 )
 
             # Draw green circle
             self.map_canvas.create_oval(
-                self.estimated_x - self.robot_radius,
-                self.estimated_y - self.robot_radius,
-                self.estimated_x + self.robot_radius,
-                self.estimated_y + self.robot_radius,
+                canvas_est_x - scaled_radius,
+                canvas_est_y - scaled_radius,
+                canvas_est_x + scaled_radius,
+                canvas_est_y + scaled_radius,
                 fill="#00FF00",  # Green
                 outline="#00FF00",
                 tags="estimated"
@@ -1347,31 +1404,31 @@ class App:
         # Schedule next update
         self.root.after(self.update_interval, self.update_loop)
 
+    def toggle_maximize(self):
+        """Toggle maximized (zoomed) state on/off"""
+        try:
+            current = self.root.state()
+            if current == 'zoomed':
+                self.root.state('normal')
+            else:
+                self.root.state('zoomed')
+        except Exception:
+            # If state('zoomed') isn't supported, emulate with screen geometry
+            try:
+                screen_w = self.root.winfo_screenwidth()
+                screen_h = self.root.winfo_screenheight()
+                if self.root.winfo_width() == screen_w and self.root.winfo_height() == screen_h:
+                    self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+                else:
+                    self.root.geometry(f"{screen_w}x{screen_h}+0+0")
+            except Exception:
+                pass
+
     def run(self):
         self.update_map_display()
         # Start the continuous update loop
         self.update_loop()
         self.root.mainloop()
-
-        def toggle_maximize(self):
-            """Toggle maximized (zoomed) state on/off"""
-            try:
-                current = self.root.state()
-                if current == 'zoomed':
-                    self.root.state('normal')
-                else:
-                    self.root.state('zoomed')
-            except Exception:
-                # If state('zoomed') isn't supported, emulate with screen geometry
-                try:
-                    screen_w = self.root.winfo_screenwidth()
-                    screen_h = self.root.winfo_screenheight()
-                    if self.root.winfo_width() == screen_w and self.root.winfo_height() == screen_h:
-                        self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-                    else:
-                        self.root.geometry(f"{screen_w}x{screen_h}+0+0")
-                except Exception:
-                    pass
 
 
 if __name__ == "__main__":
