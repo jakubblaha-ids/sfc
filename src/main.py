@@ -14,7 +14,16 @@ class App:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Robot Localization via Modern Hopfield Networks")
-        self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+        # Start the window maximized (best-effort cross-platform)
+        try:
+            self.root.state('zoomed')
+        except Exception:
+            try:
+                screen_w = self.root.winfo_screenwidth()
+                screen_h = self.root.winfo_screenheight()
+                self.root.geometry(f"{screen_w}x{screen_h}+0+0")
+            except Exception:
+                self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
 
         # Configuration manager
         self.config = ConfigManager()
@@ -42,6 +51,7 @@ class App:
 
         # Camera preprocessing parameters
         self.camera_blur_radius = CAMERA_BLUR_RADIUS
+        self.visibility_index = 0.1  # Distance opacity factor (default 0.1)
 
         # Camera parameters
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
@@ -105,6 +115,8 @@ class App:
             '<KeyPress-l>', lambda e: self.on_rotation_key_press('l'))
         self.root.bind('<KeyRelease-l>',
                        lambda e: self.on_rotation_key_release('l'))
+        # Toggle maximize with F10
+        self.root.bind('<F10>', lambda e: self.toggle_maximize())
 
     def create_layout(self):
         # Main container
@@ -146,7 +158,7 @@ class App:
             "Edit Map": self.open_map_editor,
             "Import Map": self.import_map,
             "Export Map": self.export_map,
-            "Auto Sample": self.auto_sample,
+            "Sample": self.auto_sample,
             "Train": self.train_network
         }
 
@@ -159,12 +171,9 @@ class App:
             btn.pack(side=tk.LEFT, padx=5, pady=5)
 
     def create_left_panel(self):
-        # Left Panel Container
-        self.left_panel = tk.Frame(
-            self.content_frame, width=MAP_WIDTH,
-            height=MAP_HEIGHT)
-        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
-        self.left_panel.pack_propagate(False)
+        # Left Panel Container (half the window width)
+        self.left_panel = tk.Frame(self.content_frame)
+        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Label
         lbl = tk.Label(
@@ -181,14 +190,16 @@ class App:
 
         # Placeholder text
         self.map_canvas.create_text(
-            MAP_WIDTH // 2, MAP_HEIGHT // 2, text="Map Area (800x450)",
+            MAP_WIDTH // 2, MAP_HEIGHT // 2,
+            text=f"Map Area ({MAP_WIDTH}x{MAP_HEIGHT})",
             fill="gray")
 
     def create_right_panel(self):
-        # Right Panel Container
-        self.right_panel = tk.Frame(self.content_frame)
-        self.right_panel.pack(side=tk.LEFT, fill=tk.BOTH,
-                              expand=True, padx=(PANEL_PADDING, 0))
+        # Right Panel Container (fixed width of 200 pixels)
+        self.right_panel = tk.Frame(self.content_frame, width=400)
+        self.right_panel.pack(side=tk.LEFT, fill=tk.Y,
+                              expand=False, padx=(PANEL_PADDING, 0))
+        self.right_panel.pack_propagate(False)
 
         # Label
         lbl = tk.Label(self.right_panel, text="Robot Perception",
@@ -285,6 +296,32 @@ class App:
         self.fov_slider.set(self.cone_angle)
         self.fov_slider.pack(fill=tk.X)
 
+        # Visibility Index slider
+        visibility_container = tk.Frame(settings_frame)
+        visibility_container.pack(fill=tk.X, pady=5)
+
+        visibility_label_frame = tk.Frame(visibility_container)
+        visibility_label_frame.pack(fill=tk.X)
+
+        tk.Label(
+            visibility_label_frame, text="Visibility Index:").pack(
+            side=tk.LEFT)
+        self.visibility_value_label = tk.Label(
+            visibility_label_frame, text=f"{self.visibility_index:.2f}")
+        self.visibility_value_label.pack(side=tk.LEFT, padx=5)
+
+        self.visibility_slider = tk.Scale(
+            visibility_container,
+            from_=0.01,
+            to=1.0,
+            resolution=0.01,
+            orient=tk.HORIZONTAL,
+            command=self.on_visibility_change,
+            showvalue=False
+        )
+        self.visibility_slider.set(self.visibility_index)
+        self.visibility_slider.pack(fill=tk.X)
+
     def on_blur_change(self, value):
         """Handle blur slider change"""
         self.camera_blur_radius = float(value)
@@ -295,6 +332,12 @@ class App:
         """Handle FOV slider change"""
         self.cone_angle = float(value)
         self.fov_value_label.config(text=f"{self.cone_angle:.0f}°")
+        self.update_map_display()
+
+    def on_visibility_change(self, value):
+        """Handle visibility index slider change"""
+        self.visibility_index = float(value)
+        self.visibility_value_label.config(text=f"{self.visibility_index:.2f}")
         self.update_map_display()
 
     def open_map_editor(self):
@@ -599,27 +642,37 @@ class App:
         """Draw red dots at sample positions on the canvas, sized by similarity"""
         self.clear_sample_dots()
 
+        # Find top 5 samples if similarity data is available
+        top_5_indices = set()
+        if self.sample_similarities is not None and len(
+                self.sample_similarities) > 0:
+            # Get indices of top 5 samples
+            top_5_indices = set(np.argsort(self.sample_similarities)[-5:])
+            max_similarity = max(self.sample_similarities.max(), 1e-6)
+
         for i, (x, y, _angle) in enumerate(self.sample_positions):
             # Calculate dot radius based on similarity if available
             if self.sample_similarities is not None and i < len(
                     self.sample_similarities):
-                # Scale radius based on attention weight
-                # Use sqrt to make size differences more visible
                 similarity = self.sample_similarities[i]
-                # Map similarity to radius: min radius = 1, max radius = 10
                 min_radius = 1
-                max_radius = 10
-                # Add small epsilon to avoid division by zero
-                max_similarity = max(self.sample_similarities.max(), 1e-6)
-                normalized_similarity = similarity / max_similarity
-                dot_radius = min_radius + (
-                    max_radius - min_radius) * np.sqrt(normalized_similarity)
+                max_radius = 5
+
+                # Only scale the top 5 samples linearly, rest stay at min size
+                if i in top_5_indices:
+                    # Linearly scale based on similarity within top 5
+                    normalized_similarity = similarity / max_similarity
+                    dot_radius = min_radius + (
+                        max_radius - min_radius) * normalized_similarity
+                else:
+                    # Keep at minimum size for all other samples
+                    dot_radius = min_radius
             else:
                 # Default radius if no similarity data
                 dot_radius = SAMPLE_DOT_RADIUS
 
-            # Draw a red dot
-            dot_id = self.map_canvas.create_oval(
+            # Draw a red square (replaces previous circle/oval)
+            dot_id = self.map_canvas.create_rectangle(
                 x - dot_radius,
                 y - dot_radius,
                 x + dot_radius,
@@ -643,15 +696,30 @@ class App:
         closest_idx = None
         min_distance = 15  # Generous search radius to account for larger dots
 
+        # Find top 5 samples if similarity data is available
+        top_5_indices = set()
+        if self.sample_similarities is not None and len(
+                self.sample_similarities) > 0:
+            top_5_indices = set(np.argsort(self.sample_similarities)[-5:])
+            max_similarity = max(self.sample_similarities.max(), 1e-6)
+
         for i, (x, y, _angle) in enumerate(self.sample_positions):
             distance = math.sqrt((x - canvas_x)**2 + (y - canvas_y)**2)
             # Calculate the actual radius of this dot if similarity data exists
             if self.sample_similarities is not None and i < len(
                     self.sample_similarities):
                 similarity = self.sample_similarities[i]
-                max_similarity = max(self.sample_similarities.max(), 1e-6)
-                normalized_similarity = similarity / max_similarity
-                dot_radius = 1 + 9 * np.sqrt(normalized_similarity)
+                min_radius = 1
+                max_radius = 5
+
+                # Only scale the top 5 samples, rest stay at min size
+                if i in top_5_indices:
+                    normalized_similarity = similarity / max_similarity
+                    dot_radius = min_radius + (
+                        max_radius - min_radius) * normalized_similarity
+                else:
+                    dot_radius = min_radius
+
                 hover_threshold = dot_radius + 5  # Add some margin
             else:
                 hover_threshold = SAMPLE_DOT_RADIUS + 5
@@ -857,8 +925,8 @@ class App:
         # Get maximum possible distance (to map edge)
         max_distance = self.get_distance_to_edge(x, y, dx, dy)
 
-        # Step size for ray marching (smaller = more accurate but slower)
-        step_size = 1.0
+        # Step size for ray marching (2.0 = skip every other pixel for speed)
+        step_size = 5.0
 
         # Get pixel data from the map image
         pixels = self.current_map_image.load()
@@ -933,7 +1001,8 @@ class App:
             # Calculate opacity based on distance
             # Closer = more opaque (opacity = 1.0), further = less opaque (opacity approaches 0.0)
             # Use exponential decay for more natural distance perception
-            opacity = math.exp(-distance / max_distance * 0.1)
+            # visibility_index controls how quickly opacity decreases with distance
+            opacity = math.exp(-distance / max_distance * self.visibility_index)
 
             # Blend the color with white based on opacity
             # opacity = 1.0 -> full color, opacity = 0.0 -> white
@@ -1258,6 +1327,26 @@ class App:
         # Start the continuous update loop
         self.update_loop()
         self.root.mainloop()
+
+        def toggle_maximize(self):
+            """Toggle maximized (zoomed) state on/off"""
+            try:
+                current = self.root.state()
+                if current == 'zoomed':
+                    self.root.state('normal')
+                else:
+                    self.root.state('zoomed')
+            except Exception:
+                # If state('zoomed') isn't supported, emulate with screen geometry
+                try:
+                    screen_w = self.root.winfo_screenwidth()
+                    screen_h = self.root.winfo_screenheight()
+                    if self.root.winfo_width() == screen_w and self.root.winfo_height() == screen_h:
+                        self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+                    else:
+                        self.root.geometry(f"{screen_w}x{screen_h}+0+0")
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
