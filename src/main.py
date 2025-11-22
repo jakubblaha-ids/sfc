@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from constants import *
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageFilter
 from editor import MapEditor
 from config import ConfigManager
 from hopfield import ModernHopfieldNetwork
@@ -758,6 +758,23 @@ class App:
         # Store as PIL Image (1D image with height=1)
         self.current_camera_view = Image.new('RGB', (self.camera_samples, 1))
         self.current_camera_view.putdata(camera_strip)
+
+        # Apply Gaussian blur to make observations more robust to small changes
+        if CAMERA_BLUR_RADIUS > 0:
+            # Resize to larger height temporarily for better blur effect
+            temp_height = 10
+            temp_view = self.current_camera_view.resize(
+                (self.camera_samples, temp_height),
+                Image.Resampling.NEAREST
+            )
+            # Apply blur
+            temp_view = temp_view.filter(ImageFilter.GaussianBlur(
+                radius=CAMERA_BLUR_RADIUS))
+            # Resize back to 1D strip (take middle row)
+            self.current_camera_view = temp_view.resize(
+                (self.camera_samples, 1),
+                Image.Resampling.BILINEAR
+            )
 
     def display_camera_view(self):
         """Display the camera view in the input canvas"""
