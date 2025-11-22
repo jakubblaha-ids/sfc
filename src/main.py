@@ -37,6 +37,10 @@ class App:
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
         self.current_camera_view = None  # Store current camera strip
 
+        # Key press tracking for smooth movement
+        self.keys_pressed = set()
+        self.update_interval = 16  # ~60 FPS (16ms per frame)
+
         # Configure styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
@@ -49,19 +53,19 @@ class App:
         # Load last used map if available
         self.load_last_map()
 
-        # Bind keyboard controls
-        self.root.bind(
-            '<KeyPress-w>', lambda e: self.move_robot(0, -self.robot_speed))
-        self.root.bind(
-            '<KeyPress-a>', lambda e: self.move_robot(-self.robot_speed, 0))
-        self.root.bind(
-            '<KeyPress-s>', lambda e: self.move_robot(0, self.robot_speed))
-        self.root.bind(
-            '<KeyPress-d>', lambda e: self.move_robot(self.robot_speed, 0))
-        self.root.bind('<KeyPress-j>',
-                       lambda e: self.rotate_robot(-self.robot_rotation_speed))
-        self.root.bind('<KeyPress-l>',
-                       lambda e: self.rotate_robot(self.robot_rotation_speed))
+        # Bind keyboard controls for press and release
+        self.root.bind('<KeyPress-w>', lambda e: self.on_key_press('w'))
+        self.root.bind('<KeyRelease-w>', lambda e: self.on_key_release('w'))
+        self.root.bind('<KeyPress-a>', lambda e: self.on_key_press('a'))
+        self.root.bind('<KeyRelease-a>', lambda e: self.on_key_release('a'))
+        self.root.bind('<KeyPress-s>', lambda e: self.on_key_press('s'))
+        self.root.bind('<KeyRelease-s>', lambda e: self.on_key_release('s'))
+        self.root.bind('<KeyPress-d>', lambda e: self.on_key_press('d'))
+        self.root.bind('<KeyRelease-d>', lambda e: self.on_key_release('d'))
+        self.root.bind('<KeyPress-j>', lambda e: self.on_key_press('j'))
+        self.root.bind('<KeyRelease-j>', lambda e: self.on_key_release('j'))
+        self.root.bind('<KeyPress-l>', lambda e: self.on_key_press('l'))
+        self.root.bind('<KeyRelease-l>', lambda e: self.on_key_release('l'))
 
     def create_layout(self):
         # Main container
@@ -517,8 +521,48 @@ class App:
         # Redraw the map with the robot at new angle
         self.update_map_display()
 
+    def on_key_press(self, key):
+        """Track when a key is pressed"""
+        self.keys_pressed.add(key)
+
+    def on_key_release(self, key):
+        """Track when a key is released"""
+        self.keys_pressed.discard(key)
+
+    def update_loop(self):
+        """Continuous update loop for smooth movement"""
+        # Check which keys are currently pressed and move accordingly
+        dx, dy = 0, 0
+        angle_delta = 0
+
+        if 'w' in self.keys_pressed:
+            dy -= self.robot_speed
+        if 's' in self.keys_pressed:
+            dy += self.robot_speed
+        if 'a' in self.keys_pressed:
+            dx -= self.robot_speed
+        if 'd' in self.keys_pressed:
+            dx += self.robot_speed
+        if 'j' in self.keys_pressed:
+            angle_delta -= self.robot_rotation_speed
+        if 'l' in self.keys_pressed:
+            angle_delta += self.robot_rotation_speed
+
+        # Update position if there's movement
+        if dx != 0 or dy != 0:
+            self.move_robot(dx, dy)
+
+        # Update rotation if there's rotation
+        if angle_delta != 0:
+            self.rotate_robot(angle_delta)
+
+        # Schedule next update
+        self.root.after(self.update_interval, self.update_loop)
+
     def run(self):
         self.update_map_display()
+        # Start the continuous update loop
+        self.update_loop()
         self.root.mainloop()
 
 
