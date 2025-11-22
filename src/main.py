@@ -712,9 +712,9 @@ class App:
             # Get pixel color
             pixel_color = pixels[pixel_x, pixel_y]
 
-            # Check if pixel is black (wall) - threshold for near-black pixels
-            # RGB values less than 50 are considered walls
-            if pixel_color[0] < 50 and pixel_color[1] < 50 and pixel_color[2] < 50:
+            # Check if pixel is not white (wall)
+            # Any pixel that's not pure white (255, 255, 255) is considered a wall
+            if pixel_color[0] < 255 or pixel_color[1] < 255 or pixel_color[2] < 255:
                 return distance
 
         return max_distance

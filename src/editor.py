@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, colorchooser
 from constants import *
 from PIL import Image, ImageDraw, ImageTk
 
@@ -21,6 +21,7 @@ class MapEditor:
         self.draw = ImageDraw.Draw(self.image)
         self.brush_size = 10
         self.color = "black"  # Default to drawing walls
+        self.color_rgb = (0, 0, 0)  # RGB tuple for PIL
 
         self.create_ui()
 
@@ -38,6 +39,15 @@ class MapEditor:
         btn_eraser = tk.Button(
             toolbar, text="Eraser (Free)", command=self.use_eraser)
         btn_eraser.pack(side=tk.LEFT, padx=5, pady=5)
+
+        # Color Picker Button
+        self.color_display = tk.Label(
+            toolbar, text="  ", bg=self.color, width=3, relief=tk.RAISED)
+        self.color_display.pack(side=tk.LEFT, padx=2, pady=5)
+
+        btn_color = tk.Button(
+            toolbar, text="Pick Color", command=self.pick_color)
+        btn_color.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Clear Map Button
         btn_clear = tk.Button(
@@ -66,20 +76,37 @@ class MapEditor:
 
     def use_brush(self):
         self.color = "black"
+        self.color_rgb = (0, 0, 0)
+        self.color_display.config(bg=self.color)
 
     def use_eraser(self):
         self.color = "white"
+        self.color_rgb = (255, 255, 255)
+        self.color_display.config(bg=self.color)
+
+    def pick_color(self):
+        """Open color picker dialog and set the selected color"""
+        color = colorchooser.askcolor(
+            title="Choose wall color",
+            initialcolor=self.color
+        )
+        if color[1]:  # color[1] is the hex color string
+            self.color = color[1]
+            self.color_rgb = color[0]  # color[0] is the RGB tuple
+            # Convert float RGB values to integers if needed
+            self.color_rgb = tuple(int(c) for c in self.color_rgb)
+            self.color_display.config(bg=self.color)
 
     def paint(self, event):
         x1, y1 = (event.x - self.brush_size), (event.y - self.brush_size)
         x2, y2 = (event.x + self.brush_size), (event.y + self.brush_size)
 
-        # Draw on PIL Image
+        # Draw on PIL Image (use RGB tuple)
         self.draw.ellipse(
             [x1, y1, x2, y2],
-            fill=self.color, outline=self.color)
+            fill=self.color_rgb, outline=self.color_rgb)
 
-        # Draw on Canvas
+        # Draw on Canvas (use hex color string)
         self.canvas.create_oval(
             x1, y1, x2, y2, fill=self.color, outline=self.color)
 
