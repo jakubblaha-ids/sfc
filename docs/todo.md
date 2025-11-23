@@ -1,3 +1,3 @@
 -   noise/random objects
 -   localization confidence heatmap
--   visualize how fat the cat sees
+-   visualize how far the cat sees

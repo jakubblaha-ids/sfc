@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, ttk
 from constants import *
 from PIL import Image, ImageTk, ImageFilter, ImageDraw
 from editor import MapEditor
@@ -111,20 +111,20 @@ class App:
                        lambda e: self.on_rotation_key_release('l'))
 
     def create_layout(self):
-        self.main_container = tk.Frame(self.root)
+        self.main_container = ttk.Frame(self.root)
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
-        self.toolbar_frame = tk.Frame(self.main_container)
+        self.toolbar_frame = ttk.Frame(self.main_container)
         self.toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
 
-        self.content_frame = tk.Frame(self.main_container)
+        self.content_frame = ttk.Frame(self.main_container)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH,
                                 expand=True, padx=5, pady=5)
 
-        self.status_frame = tk.Frame(self.main_container)
+        self.status_frame = ttk.Frame(self.main_container)
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
-        self.status_label = tk.Label(self.status_frame, text="", anchor="w")
+        self.status_label = ttk.Label(self.status_frame, text="", anchor="w")
         self.status_label.pack(side=tk.LEFT, fill=tk.X,
                                expand=True, padx=5, pady=5)
 
@@ -137,11 +137,12 @@ class App:
         }
 
         for btn_text, command in buttons.items():
-            btn = tk.Button(self.toolbar_frame, text=btn_text, command=command)
+            btn = ttk.Button(self.toolbar_frame,
+                             text=btn_text, command=command)
             btn.pack(side=tk.LEFT, padx=5, pady=5)
 
     def create_left_panel(self):
-        self.left_panel = tk.Frame(self.content_frame)
+        self.left_panel = ttk.Frame(self.content_frame)
         self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH,
                              expand=True, padx=5, pady=5)
 
@@ -160,16 +161,16 @@ class App:
 
     def create_right_panel(self):
         # Create a frame for the right panel with a scrollbar
-        right_panel_container = tk.Frame(self.content_frame, width=400)
+        right_panel_container = ttk.Frame(self.content_frame, width=400)
         right_panel_container.pack(
             side=tk.LEFT, fill=tk.Y, expand=False, padx=(5, 10), pady=5)
         right_panel_container.pack_propagate(False)
 
         # Add a canvas and scrollbar for scrolling
         canvas = tk.Canvas(right_panel_container)
-        scrollbar = tk.Scrollbar(
+        scrollbar = ttk.Scrollbar(
             right_panel_container, orient=tk.VERTICAL, command=canvas.yview)
-        self.right_panel = tk.Frame(canvas)
+        self.right_panel = ttk.Frame(canvas)
 
         self.right_panel.bind(
             "<Configure>", lambda e: canvas.configure(
@@ -178,9 +179,12 @@ class App:
         canvas.create_window((0, 0), window=self.right_panel, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Adjust the layout to prevent the scrollbar from overlapping the content
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        spacer_width = 100
+        spacer_frame = ttk.Frame(self.right_panel, width=spacer_width)
+        spacer_frame.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Add content to the right panel
         input_frame = tk.LabelFrame(self.right_panel, text="Current Input")
@@ -204,12 +208,15 @@ class App:
         sim_frame = tk.LabelFrame(self.right_panel, text="Similarity Metric")
         sim_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.sim_label = tk.Label(
-            sim_frame, text="Confidence: 0.0%", anchor=tk.CENTER
+        # Align all label texts to the left side
+        self.sim_label = ttk.Label(
+            sim_frame, text="Confidence: 0.0%", anchor="w"
         )
         self.sim_label.pack(fill=tk.X, padx=5, pady=5)
 
-        self.sim_progressbar = tk.Canvas(sim_frame, height=10, bg="#d9d9d9")
+        # Use a ttk Progressbar for similarity metric
+        self.sim_progressbar = ttk.Progressbar(
+            sim_frame, orient='horizontal', mode='determinate', maximum=100)
         self.sim_progressbar.pack(fill=tk.X, padx=5, pady=5)
 
         settings_frame = tk.LabelFrame(
@@ -220,12 +227,13 @@ class App:
         blur_container = tk.LabelFrame(settings_frame, text="Blur Radius")
         blur_container.pack(fill=tk.X, padx=5, pady=5)
 
-        self.blur_value_label = tk.Label(
-            blur_container, text=f"{self.camera_blur_radius:.1f}"
+        self.blur_value_label = ttk.Label(
+            blur_container, text=f"{self.camera_blur_radius:.1f}", anchor="w"
         )
         self.blur_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.blur_slider = tk.Scale(
+        # Use ttk.Scale (continuous) for blur
+        self.blur_slider = ttk.Scale(
             blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
             command=self.on_blur_change
         )
@@ -235,12 +243,12 @@ class App:
         fov_container = tk.LabelFrame(settings_frame, text="Field of View")
         fov_container.pack(fill=tk.X, padx=5, pady=5)
 
-        self.fov_value_label = tk.Label(
-            fov_container, text=f"{self.cone_angle:.0f}°"
+        self.fov_value_label = ttk.Label(
+            fov_container, text=f"{self.cone_angle:.0f}°", anchor="w"
         )
         self.fov_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.fov_slider = tk.Scale(
+        self.fov_slider = ttk.Scale(
             fov_container, from_=30, to=360, orient=tk.HORIZONTAL,
             command=self.on_fov_change
         )
@@ -252,13 +260,13 @@ class App:
         )
         visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
-        self.visibility_value_label = tk.Label(
-            visibility_container, text=f"{self.visibility_index:.2f}"
+        self.visibility_value_label = ttk.Label(
+            visibility_container, text=f"{self.visibility_index:.2f}", anchor="w"
         )
         self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.visibility_slider = tk.Scale(
-            visibility_container, from_=0.01, to=1.0, resolution=0.01,
+        self.visibility_slider = ttk.Scale(
+            visibility_container, from_=0.01, to=1.0,
             orient=tk.HORIZONTAL, command=self.on_visibility_change
         )
         self.visibility_slider.set(self.visibility_index)
@@ -269,45 +277,48 @@ class App:
         )
         beta_container.pack(fill=tk.X, padx=5, pady=5)
 
-        self.beta_value_label = tk.Label(
-            beta_container, text=f"{self.beta:.1f}"
+        self.beta_value_label = ttk.Label(
+            beta_container, text=f"{self.beta:.1f}", anchor="w"
         )
         self.beta_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.beta_slider = tk.Scale(
+        self.beta_slider = ttk.Scale(
             beta_container, from_=1.0, to=200.0, orient=tk.HORIZONTAL,
             command=self.on_beta_change
         )
         self.beta_slider.set(self.beta)
         self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
 
-        self.interleaved_rgb_checkbox = tk.Checkbutton(
+        # Interleaved RGB checkbox (left-aligned)
+        self.interleaved_rgb_checkbox = ttk.Checkbutton(
             settings_frame, text="Interleaved RGB encoding",
             variable=self.interleaved_rgb,
             command=self.on_interleaved_rgb_toggle
         )
         self.interleaved_rgb_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
+        # Accuracy statistics frame (contains test-position and heatmap checkboxes)
         stats_frame = tk.LabelFrame(
             self.right_panel, text="Accuracy Statistics"
         )
         stats_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.stats_label = tk.Label(
+        self.stats_label = ttk.Label(
             stats_frame, text="Train the network to see accuracy statistics",
             font=("Arial", 9),
-            justify=tk.LEFT
+            anchor="w"
         )
         self.stats_label.pack(fill=tk.X, padx=5, pady=5)
 
-        self.show_test_positions_checkbox = tk.Checkbutton(
+        # Align checkbox labels to the left and pack them into stats_frame
+        self.show_test_positions_checkbox = ttk.Checkbutton(
             stats_frame, text="Show test positions",
             variable=self.show_test_positions,
             command=self.on_show_test_positions_toggle
         )
         self.show_test_positions_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
-        self.show_confidence_heatmap_checkbox = tk.Checkbutton(
+        self.show_confidence_heatmap_checkbox = ttk.Checkbutton(
             stats_frame, text="Show confidence heatmap",
             variable=self.show_confidence_heatmap,
             command=self.on_show_confidence_heatmap_toggle
