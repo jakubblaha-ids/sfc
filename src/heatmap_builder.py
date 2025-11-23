@@ -88,6 +88,80 @@ class HeatmapBuilder:
 
         return heatmap_image
 
+    def build_averaged_heatmap(
+        self,
+        grid_positions_by_angle,
+        grid_confidences_by_angle,
+        colormap_name='jet',
+        sigma=10.0,
+        alpha_base=100,
+        alpha_scale=155,
+        threshold=0.001
+    ):
+        """
+        Build an averaged heatmap across all angles.
+
+        Args:
+            grid_positions_by_angle: Dict mapping angles to lists of (x, y) tuples
+            grid_confidences_by_angle: Dict mapping angles to lists of confidence values
+            colormap_name: Name of matplotlib colormap to use (default: 'jet')
+            sigma: Gaussian smoothing sigma value (default: 10.0)
+            alpha_base: Base alpha value for transparency (default: 100)
+            alpha_scale: Additional alpha scaling factor (default: 155)
+            threshold: Minimum confidence threshold for visibility (default: 0.001)
+
+        Returns:
+            PIL Image in RGBA mode, or None if no data
+        """
+        averaged_positions, averaged_confidences = self._compute_averaged_data(
+            grid_positions_by_angle, grid_confidences_by_angle)
+
+        if not averaged_positions or not averaged_confidences:
+            return None
+
+        return self.build_heatmap(
+            averaged_positions,
+            averaged_confidences,
+            colormap_name,
+            sigma,
+            alpha_base,
+            alpha_scale,
+            threshold
+        )
+
+    def _compute_averaged_data(
+            self, grid_positions_by_angle, grid_confidences_by_angle):
+        """
+        Compute averaged confidence values across all angles for each position.
+
+        Args:
+            grid_positions_by_angle: Dict mapping angles to lists of (x, y) tuples
+            grid_confidences_by_angle: Dict mapping angles to lists of confidence values
+
+        Returns:
+            Tuple of (positions, averaged_confidences) where positions is a list
+            of (x, y) tuples and averaged_confidences is a list of averaged values
+        """
+        position_confidences = {}
+
+        for angle in grid_positions_by_angle.keys():
+            positions = grid_positions_by_angle.get(angle, [])
+            confidences = grid_confidences_by_angle.get(angle, [])
+
+            for pos, conf in zip(positions, confidences):
+                if pos not in position_confidences:
+                    position_confidences[pos] = []
+                position_confidences[pos].append(conf)
+
+        averaged_positions = []
+        averaged_confidences = []
+
+        for pos, conf_list in position_confidences.items():
+            averaged_positions.append(pos)
+            averaged_confidences.append(np.mean(conf_list))
+
+        return averaged_positions, averaged_confidences
+
     def _populate_grid_interpolated(
             self, grid_positions, grid_confidences, max_confidence):
         """

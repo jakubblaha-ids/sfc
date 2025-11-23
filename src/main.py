@@ -70,6 +70,8 @@ class App:
 
         self.show_confidence_heatmap = tk.BooleanVar(
             value=False)  # Checkbox state
+        self.average_heatmap = tk.BooleanVar(
+            value=False)  # Checkbox for averaging heatmaps
         self.heatmap_overlay = None  # PIL Image for the heatmap overlay
         self.heatmap_grid_positions_by_angle = {}
         self.heatmap_grid_confidences_by_angle = {}
@@ -327,6 +329,13 @@ class App:
         )
         self.show_confidence_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
+        self.average_heatmap_checkbox = ttk.Checkbutton(
+            stats_frame, text="Average heatmap across all angles",
+            variable=self.average_heatmap,
+            command=self.on_average_heatmap_toggle
+        )
+        self.average_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
+
     def on_show_test_positions_toggle(self):
         """Handle checkbox toggle for showing test positions"""
         self.update_map_display()
@@ -336,6 +345,10 @@ class App:
         if self.show_confidence_heatmap.get():
             if not self.heatmap_computed:
                 self.compute_confidence_heatmap()
+        self.update_map_display()
+
+    def on_average_heatmap_toggle(self):
+        """Handle checkbox toggle for averaging heatmap across all angles"""
         self.update_map_display()
 
     def on_blur_change(self, value):
@@ -1063,21 +1076,6 @@ class App:
         if not self.heatmap_computed or not self.heatmap_angles:
             return
 
-        closest_angle = self._find_closest_heatmap_angle(self.robot_angle)
-
-        if closest_angle is None:
-            return
-
-        grid_positions = self.heatmap_grid_positions_by_angle.get(
-            closest_angle, [])
-        grid_confidences = self.heatmap_grid_confidences_by_angle.get(
-            closest_angle, [])
-
-        if not grid_positions or not grid_confidences:
-            return
-
-        # Use lower resolution for faster computation
-        # The result is upscaled smoothly to full size
         builder = HeatmapBuilder(
             map_width=MAP_WIDTH,
             map_height=MAP_HEIGHT,
@@ -1085,15 +1083,39 @@ class App:
             resolution_scale=HEATMAP_RESOLUTION_SCALE
         )
 
-        heatmap_image = builder.build_heatmap(
-            grid_positions=grid_positions,
-            grid_confidences=grid_confidences,
-            colormap_name='jet',
-            sigma=20.0,
-            alpha_base=100,
-            alpha_scale=155,
-            threshold=0.001
-        )
+        if self.average_heatmap.get():
+            heatmap_image = builder.build_averaged_heatmap(
+                grid_positions_by_angle=self.heatmap_grid_positions_by_angle,
+                grid_confidences_by_angle=self.heatmap_grid_confidences_by_angle,
+                colormap_name='jet',
+                sigma=20.0,
+                alpha_base=100,
+                alpha_scale=155,
+                threshold=0.001
+            )
+        else:
+            closest_angle = self._find_closest_heatmap_angle(self.robot_angle)
+
+            if closest_angle is None:
+                return
+
+            grid_positions = self.heatmap_grid_positions_by_angle.get(
+                closest_angle, [])
+            grid_confidences = self.heatmap_grid_confidences_by_angle.get(
+                closest_angle, [])
+
+            if not grid_positions or not grid_confidences:
+                return
+
+            heatmap_image = builder.build_heatmap(
+                grid_positions=grid_positions,
+                grid_confidences=grid_confidences,
+                colormap_name='jet',
+                sigma=20.0,
+                alpha_base=100,
+                alpha_scale=155,
+                threshold=0.001
+            )
 
         if heatmap_image is not None:
             image.paste(heatmap_image, (0, 0), heatmap_image)
