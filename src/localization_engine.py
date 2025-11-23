@@ -79,13 +79,14 @@ class LocalizationEngine:
             print(f"Training error: {e}")
             return False
 
-    def localize(self, camera_view):
+    def localize(self, camera_view, top_k=1):
         """
         Perform localization given a camera view.
-        Retrieves the closest matching pattern and estimates position.
+        Retrieves the closest matching pattern(s) and estimates position.
 
         Args:
             camera_view: PIL Image of current camera view
+            top_k: Number of best matches to combine for position prediction
 
         Returns:
             Dictionary with keys: 'x', 'y', 'angle', 'confidence', 'sample_idx'
@@ -107,19 +108,54 @@ class LocalizationEngine:
             for idx, weight in zip(all_indices, all_weights):
                 self.sample_similarities[idx] = weight
 
-            best_idx = all_indices[0]
-            best_weight = all_weights[0]
+            actual_top_k = min(top_k, len(all_indices))
+            top_indices = all_indices[:actual_top_k]
+            top_weights = all_weights[:actual_top_k]
 
-            self.last_retrieved_idx = best_idx
+            if actual_top_k == 1:
+                best_idx = top_indices[0]
+                best_weight = top_weights[0]
+                self.last_retrieved_idx = best_idx
+                x, y, angle = self.sample_positions[best_idx]
+                top_k_matches = []
+            else:
+                weight_sum = np.sum(top_weights)
+                if weight_sum == 0:
+                    weight_sum = 1.0
 
-            x, y, angle = self.sample_positions[best_idx]
+                normalized_weights = top_weights / weight_sum
+
+                x_weighted = 0.0
+                y_weighted = 0.0
+
+                top_k_matches = []
+                for idx, weight in zip(top_indices, normalized_weights):
+                    pos_x, pos_y, pos_angle = self.sample_positions[idx]
+                    x_weighted += pos_x * weight
+                    y_weighted += pos_y * weight
+                    top_k_matches.append({
+                        'x': pos_x,
+                        'y': pos_y,
+                        'angle': pos_angle,
+                        'weight': float(weight),
+                        'sample_idx': int(idx)
+                    })
+
+                best_idx = top_indices[0]
+                best_weight = top_weights[0]
+                self.last_retrieved_idx = best_idx
+
+                x = x_weighted
+                y = y_weighted
+                _, _, angle = self.sample_positions[best_idx]
 
             return {
                 'x': x,
                 'y': y,
                 'angle': angle,
                 'confidence': float(best_weight),
-                'sample_idx': int(best_idx)
+                'sample_idx': int(best_idx),
+                'top_k_matches': top_k_matches
             }
 
         except Exception as e:

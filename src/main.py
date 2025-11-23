@@ -61,12 +61,15 @@ class App:
         self.estimated_y = None
         self.estimated_angle = None
         self.retrieved_sample_idx = None
+        self.top_k_matches = []
 
         self.test_position_dots = []
         self.show_test_positions = tk.BooleanVar(value=False)
 
         self.show_confidence_heatmap = tk.BooleanVar(value=False)
         self.average_heatmap = tk.BooleanVar(value=False)
+
+        self.top_k = DEFAULT_TOP_K
 
         self.hovered_sample_idx = None
 
@@ -208,9 +211,7 @@ class App:
         )
         self.sim_label.pack(fill=tk.X, padx=5, pady=5)
 
-        # Use a ttk Progressbar for similarity metric
-        self.sim_progressbar = ttk.Progressbar(
-            sim_frame, orient='horizontal', mode='determinate', maximum=100)
+        self.sim_progressbar = ttk.Progressbar(sim_frame, orient='horizontal', mode='determinate', maximum=100)
         self.sim_progressbar.pack(fill=tk.X, padx=5, pady=5)
 
         settings_frame = tk.LabelFrame(
@@ -226,7 +227,6 @@ class App:
         )
         self.blur_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        # Use ttk.Scale (continuous) for blur
         self.blur_slider = ttk.Scale(
             blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
             command=self.on_blur_change
@@ -282,6 +282,23 @@ class App:
         )
         self.beta_slider.set(DEFAULT_BETA)
         self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
+
+        top_k_container = tk.LabelFrame(
+            settings_frame, text="Combine top k matches"
+        )
+        top_k_container.pack(fill=tk.X, padx=5, pady=5)
+
+        self.top_k_value_label = ttk.Label(
+            top_k_container, text=f"{DEFAULT_TOP_K}", anchor="w"
+        )
+        self.top_k_value_label.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.top_k_slider = ttk.Scale(
+            top_k_container, from_=1, to=20, orient=tk.HORIZONTAL,
+            command=self.on_top_k_change
+        )
+        self.top_k_slider.set(DEFAULT_TOP_K)
+        self.top_k_slider.pack(fill=tk.X, padx=5, pady=5)
 
         noise_container = tk.LabelFrame(
             settings_frame, text="Noise Settings"
@@ -393,6 +410,14 @@ class App:
         if self.localization.is_trained:
             self.update_map_display()
 
+    def on_top_k_change(self, value):
+        """Handle top-k slider change"""
+        self.top_k = int(float(value))
+        self.top_k_value_label.config(text=f"{self.top_k}")
+        if self.localization.is_trained:
+            self.localize()
+            self.update_map_display()
+
     def on_interleaved_rgb_toggle(self):
         """Handle interleaved RGB checkbox toggle"""
         if self.localization.is_trained:
@@ -457,7 +482,7 @@ class App:
         def localization_callback(x, y, angle):
             map_image = self.get_map_for_raytracing()
             camera_view = self.camera.capture_view(x, y, angle, map_image)
-            return self.localization.localize(camera_view)
+            return self.localization.localize(camera_view, top_k=1)
 
         result = self.confidence.compute_confidence_heatmap(
             grid_positions_by_angle, localization_callback)
@@ -593,7 +618,9 @@ class App:
         if self.localization.get_num_samples() > 0:
             self.train_network(show_message=False)
 
-            self.status_label['text'] = f"✓ Generated {self.localization.get_num_samples()} samples and trained network with {self.localization.get_num_samples()} patterns"
+            self.status_label['text'] = f"✓ Generated {
+                self.localization.get_num_samples()}  samples and trained network with {
+                self.localization.get_num_samples()}  patterns"
 
     def auto_sample(self, show_message=True):
         """
@@ -653,7 +680,9 @@ class App:
 
             if show_message:
                 if self.confidence.average_confidence is not None:
-                    self.status_label['text'] = f"✓ Network trained with {self.localization.get_num_samples()} patterns. Avg confidence: {self.confidence.average_confidence * 100:.1f}%"
+                    self.status_label['text'] = f"✓ Network trained with {
+                        self.localization.get_num_samples()}  patterns. Avg confidence: {
+                        self.confidence.average_confidence * 100: .1f} %"
                 else:
                     self.status_label['text'] = f"✓ Network trained with {
                         self.localization.get_num_samples()}  patterns."
@@ -679,7 +708,7 @@ class App:
 
         def localization_callback(x, y, angle):
             camera_view = self.camera.capture_view(x, y, angle, map_image)
-            return self.localization.localize(camera_view)
+            return self.localization.localize(camera_view, top_k=1)
 
         result = self.confidence.compute_average_confidence(
             test_positions, localization_callback)
@@ -772,6 +801,28 @@ class App:
             )
             self.test_position_dots.append(dot_id)
 
+    def draw_top_k_interpolation_lines(self):
+        """Draw black lines from top k matches to the final predicted position"""
+        if not self.top_k_matches or self.estimated_x is None or self.estimated_y is None:
+            return
+
+        canvas_est_x, canvas_est_y = self.image_to_canvas_coords(
+            self.estimated_x, self.estimated_y)
+
+        for match in self.top_k_matches:
+            match_x = match['x']
+            match_y = match['y']
+            canvas_match_x, canvas_match_y = self.image_to_canvas_coords(
+                match_x, match_y)
+
+            self.map_canvas.create_line(
+                canvas_match_x, canvas_match_y,
+                canvas_est_x, canvas_est_y,
+                fill="#000000",
+                width=max(1, int(1 * self.map_scale_factor)),
+                tags="top_k_line"
+            )
+
     def on_map_canvas_resize(self, event):
         """Handle map canvas resize and update display"""
         self.update_map_display()
@@ -831,20 +882,6 @@ class App:
                 self.memory_canvas.delete("all")
                 self.memory_frame.config(text="Retrieved Memory")
 
-    def update_map_display_during_sampling(self):
-        """Update map display during sampling to show robot position and camera view"""
-        display_image = self.current_map_image.copy()
-
-        self.draw_viewing_cone_on_image(display_image)
-
-        self._display_scaled_map_image(display_image)
-
-        self.draw_sample_dots()
-
-        self.draw_robot()
-
-        self.display_camera_view()
-
     def _display_scaled_map_image(self, display_image):
         """Scale and display the map image to fit canvas width while maintaining aspect ratio"""
         canvas_width = self.map_canvas.winfo_width()
@@ -901,6 +938,8 @@ class App:
         self.draw_sample_dots()
 
         self.draw_test_position_dots()
+
+        self.draw_top_k_interpolation_lines()
 
         self.draw_robot()
 
@@ -1042,13 +1081,14 @@ class App:
         if self.current_camera_view is None:
             return
 
-        result = self.localization.localize(self.current_camera_view)
+        result = self.localization.localize(self.current_camera_view, top_k=self.top_k)
 
         if result:
             self.estimated_x = result['x']
             self.estimated_y = result['y']
             self.estimated_angle = result['angle']
             self.retrieved_sample_idx = result['sample_idx']
+            self.top_k_matches = result.get('top_k_matches', [])
 
             self.display_retrieved_memory(
                 result['sample_idx'],

@@ -47,6 +47,10 @@ INTERLEAVED_RGB = False
 # Lower beta = softer, more distributed retrievals
 DEFAULT_BETA = 50.0
 
+# Top-k matches for weighted interpolation
+# Number of best matches to combine for final position prediction
+DEFAULT_TOP_K = 1
+
 # Noise settings
 # Number of random objects to place on the map
 DEFAULT_NOISE_AMOUNT = 10
