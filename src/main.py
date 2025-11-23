@@ -61,8 +61,9 @@ class App:
 
         self.sample_similarities = None  # Array of similarity scores for each sample
 
-        self.accuracy_avg_distance = None  # Average distance error
-        self.accuracy_num_tests = None  # Number of test positions
+        # Average confidence computed during evaluation (0.0 - 1.0)
+        self.average_confidence = None
+        self.confidence_num_tests = None  # Number of evaluation positions
         self.test_positions = []
         self.test_position_dots = []  # Canvas IDs of test position dots
         self.show_test_positions = tk.BooleanVar(value=False)  # Checkbox state
@@ -297,22 +298,23 @@ class App:
         )
         self.interleaved_rgb_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
-        # Accuracy statistics frame (contains test-position and heatmap checkboxes)
+        # Confidence statistics frame (contains computation-position and heatmap checkboxes)
         stats_frame = tk.LabelFrame(
-            self.right_panel, text="Accuracy Statistics"
+            self.right_panel, text="Confidence Statistics"
         )
         stats_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.stats_label = ttk.Label(
-            stats_frame, text="Train the network to see accuracy statistics",
+            stats_frame, text="Train the network to see confidence statistics",
             font=("Arial", 9),
             anchor="w"
         )
         self.stats_label.pack(fill=tk.X, padx=5, pady=5)
 
         # Align checkbox labels to the left and pack them into stats_frame
+        # Checkbox: show the positions used during the confidence computation
         self.show_test_positions_checkbox = ttk.Checkbutton(
-            stats_frame, text="Show test positions",
+            stats_frame, text="Show confidence computation positions",
             variable=self.show_test_positions,
             command=self.on_show_test_positions_toggle
         )
@@ -397,10 +399,11 @@ class App:
         original_y = self.robot_y
         original_angle = self.robot_angle
 
-        total_evaluations = len(x_positions) * \
-            len(y_positions) * len(test_angles)
+        total_evaluations = len(
+            x_positions) * len(y_positions) * len(test_angles)
         evaluated_count = 0
 
+        # One-time status update before the potentially long computation.
         self.status_label['text'] = f"Computing heatmap: 0/{total_evaluations}"
 
         for angle_idx, test_angle in enumerate(test_angles):
@@ -427,11 +430,6 @@ class App:
 
                     evaluated_count += 1
 
-                    if evaluated_count % 1000 == 0 or evaluated_count == total_evaluations:
-                        self.status_label['text'] = f"Computing heatmap: {
-                            evaluated_count}/{total_evaluations} (angle {angle_idx + 1}/{len(test_angles)})"
-                        self.root.update()
-
             self.heatmap_grid_positions_by_angle[test_angle] = positions_for_angle
             self.heatmap_grid_confidences_by_angle[test_angle] = confidences_for_angle
 
@@ -441,6 +439,7 @@ class App:
 
         self.heatmap_computed = True
 
+        # Final one-time status update after computation finishes.
         self.status_label[
             'text'] = f"✓ Heatmap computed: {total_evaluations} positions across {len(test_angles)} angles."
 
@@ -566,6 +565,7 @@ class App:
         if len(self.sample_embeddings) > 0:
             self.train_network(show_message=False)
 
+            # Single final status update (avoid frequent UI updates during work)
             self.status_label['text'] = f"✓ Generated {
                 len(self.sample_positions)}  samples and trained network with {
                 len(self.sample_embeddings)}  patterns"
@@ -598,6 +598,7 @@ class App:
         total_samples = len(x_positions) * len(y_positions) * len(angles)
         sample_count = 0
 
+        # One-time status before sampling starts
         self.status_label['text'] = f"Sampling: 0/{total_samples}"
 
         for x in x_positions:
@@ -613,21 +614,11 @@ class App:
 
                     self.sample_positions.append((x, y, angle))
                     self.sample_embeddings.append(embedding)
-                    self.sample_views.append(
-                        self.current_camera_view.copy())
+                    self.sample_views.append(self.current_camera_view.copy())
 
                     sample_count += 1
 
-                    if SAMPLE_UPDATE_FREQUENCY is not None and (
-                            sample_count % SAMPLE_UPDATE_FREQUENCY == 0
-                            or sample_count == total_samples):
-                        self.status_label['text'] = f"Sampling: {
-                            sample_count}/{total_samples}"
-
-                        self.update_map_display_during_sampling()
-
-                        self.root.update()
-
+        # Restore original pose and refresh UI once
         self.robot_x = original_x
         self.robot_y = original_y
         self.robot_angle = original_angle
@@ -635,6 +626,7 @@ class App:
         self.update_map_display()
         self.draw_sample_dots()
 
+        # Clear status and optionally show final message
         self.status_label['text'] = ""
 
         if show_message:
@@ -657,18 +649,12 @@ class App:
         self.hopfield_network = ModernHopfieldNetwork(
             embedding_dim, beta=self.beta)
 
-        def update_training_progress(current, total):
-            self.status_label['text'] = f"Training: {current}/{total}"
-            self.root.update()
-
+        # One-time status before training starts
         self.status_label['text'] = f"Training: 0/{
             len(self.sample_embeddings)} "
 
         try:
-            self.hopfield_network.train(
-                self.sample_embeddings,
-                progress_callback=update_training_progress
-            )
+            self.hopfield_network.train(self.sample_embeddings)
 
             self.is_trained = True
 
@@ -677,23 +663,29 @@ class App:
             self.heatmap_grid_confidences_by_angle = {}
             self.heatmap_angles = []
 
-            self.evaluate_accuracy()
+            # Compute average confidence deterministically after training
+            self.compute_average_confidence()
 
             if show_message:
-                self.status_label['text'] = f"✓ Network trained with {len(self.sample_embeddings)} patterns. Avg distance error: {self.accuracy_avg_distance:.2f} px"
+                if self.average_confidence is not None:
+                    self.status_label['text'] = f"✓ Network trained with {len(self.sample_embeddings)} patterns. Avg confidence: {self.average_confidence * 100:.1f}%"
+                else:
+                    self.status_label['text'] = f"✓ Network trained with {
+                        len(self.sample_embeddings)}  patterns."
             else:
                 self.status_label['text'] = ""
 
         except Exception as e:
             self.status_label['text'] = f"❌ Training error: {str(e)}"
 
-    def evaluate_accuracy(self, num_tests=100):
+    def compute_average_confidence(self, num_tests=None):
         """
-        Evaluate the accuracy of the trained network by testing on random positions.
-        Computes the average distance between predicted and actual closest sample positions.
+        Deterministically compute average retrieval confidence over a set of
+        positions. Positions are taken from a grid (SAMPLE_STRIDE) and a set
+        of discrete angles so the result is repeatable.
 
         Args:
-            num_tests: Number of random test positions (default: 100)
+            num_tests: maximum number of evaluation positions to use (default: 100)
         """
         if not self.is_trained or self.hopfield_network is None:
             return
@@ -702,81 +694,82 @@ class App:
         original_y = self.robot_y
         original_angle = self.robot_angle
 
-        self.status_label['text'] = f"Evaluating accuracy: 0/{num_tests}"
+        grid_stride = max(1, SAMPLE_STRIDE // 2)
+        half_stride = max(0, grid_stride // 2)
 
-        total_distance_error = 0.0
-        valid_tests = 0
+        x_positions = list(range(half_stride, MAP_WIDTH, grid_stride))
+        y_positions = list(range(half_stride, MAP_HEIGHT, grid_stride))
+        test_angles = [i * (360 / SAMPLE_ROTATIONS)
+                       for i in range(SAMPLE_ROTATIONS)]
+
+        # Create full list of deterministic test positions (angle, x, y)
+        all_positions = []
+        for angle in test_angles:
+            for x in x_positions:
+                for y in y_positions:
+                    all_positions.append((x, y, angle))
+
+        # If num_tests is None, evaluate all positions; otherwise limit to
+        # the requested deterministic prefix of positions.
+        if num_tests is None:
+            selected_positions = all_positions
+        else:
+            selected_positions = all_positions[:max(0, int(num_tests))]
 
         self.test_positions = []
+        total_confidence = 0.0
+        valid_tests = 0
 
-        for i in range(num_tests):
-            test_x = np.random.randint(0, MAP_WIDTH)
-            test_y = np.random.randint(0, MAP_HEIGHT)
-            test_angle = np.random.uniform(0, 360)
+        total_to_run = len(selected_positions)
 
-            self.robot_x = test_x
-            self.robot_y = test_y
-            self.robot_angle = test_angle
+        # One-time status before running confidence tests
+        self.status_label['text'] = f"Computing avg confidence: 0/{
+            total_to_run} "
+
+        count = 0
+        for x, y, angle in selected_positions:
+            self.robot_x = x
+            self.robot_y = y
+            self.robot_angle = angle
 
             self.capture_camera_view()
 
             query_embedding = self.create_embedding(self.current_camera_view)
 
-            best_idx, _best_weight = self.hopfield_network.retrieve(
+            best_idx, best_weight = self.hopfield_network.retrieve(
                 query_embedding, top_k=1)
-            best_idx = best_idx[0]
 
-            pred_x, pred_y, _pred_angle = self.sample_positions[best_idx]
-
-            min_distance = float('inf')
-            closest_x = test_x
-            closest_y = test_y
-            for sample_x, sample_y, sample_angle in self.sample_positions:
-                pos_distance = math.sqrt(
-                    (sample_x - test_x) ** 2 + (sample_y - test_y) ** 2)
-                angle_diff = abs(sample_angle - test_angle)
-                angle_diff = min(angle_diff, 360 - angle_diff)
-
-                combined_distance = pos_distance + (angle_diff / 180.0) * 10
-
-                if combined_distance < min_distance:
-                    min_distance = combined_distance
-                    closest_x = sample_x
-                    closest_y = sample_y
-
-            distance_error = math.sqrt(
-                (pred_x - closest_x) ** 2 + (pred_y - closest_y) ** 2)
-            total_distance_error += distance_error
+            # best_weight is an array-like; take first value
+            confidence = float(best_weight[0])
+            total_confidence += confidence
             valid_tests += 1
 
-            self.test_positions.append((test_x, test_y))
+            # store only image coordinates for plotting test points
+            self.test_positions.append((x, y))
 
-            self.status_label['text'] = f"Evaluating accuracy: {
-                i + 1} /{num_tests} "
-            self.root.update()
+            count += 1
 
         self.robot_x = original_x
         self.robot_y = original_y
         self.robot_angle = original_angle
 
         if valid_tests > 0:
-            self.accuracy_avg_distance = total_distance_error / valid_tests
-            self.accuracy_num_tests = valid_tests
-
+            self.average_confidence = total_confidence / valid_tests
+            self.confidence_num_tests = valid_tests
             self.update_statistics_display()
-
+        # Final status update after computation
         self.status_label['text'] = ""
 
     def update_statistics_display(self):
-        """Update the statistics display with accuracy information"""
-        if self.accuracy_avg_distance is not None:
-            stats_text = f"Test Positions: {self.accuracy_num_tests}\n"
-            stats_text += f"Avg Distance Error: {
-                self.accuracy_avg_distance: .2f}  pixels"
+        """Update the statistics display with confidence information"""
+        if self.average_confidence is not None:
+            stats_text = f"Test Positions: {self.confidence_num_tests}\n"
+            stats_text += f"Avg Confidence: {
+                self.average_confidence * 100: .1f} %"
             self.stats_label.config(text=stats_text)
         else:
             self.stats_label.config(
-                text="Train the network to see accuracy statistics")
+                text="Train the network to see confidence statistics")
 
     def create_embedding(self, camera_view):
         """

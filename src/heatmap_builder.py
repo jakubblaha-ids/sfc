@@ -70,13 +70,6 @@ class HeatmapBuilder:
         scaled_sigma = sigma * self.resolution_scale
         smoothed_grid = gaussian_filter(confidence_grid, sigma=scaled_sigma)
 
-        # Debug: print some stats
-        print(
-            f"Heatmap stats (res: {self.heatmap_width}x{self.heatmap_height}) - "
-            f"Min: {smoothed_grid.min():.4f}, Max: {smoothed_grid.max():.4f}, "
-            f"Mean: {smoothed_grid.mean():.4f}, Non-zero pixels: {np.count_nonzero(smoothed_grid)}"
-        )
-
         # Apply colormap and create RGBA image at low resolution
         heatmap_image = self._apply_colormap(
             smoothed_grid,
