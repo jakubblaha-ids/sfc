@@ -60,3 +60,57 @@ DEFAULT_NOISE_AMOUNT = 10
 # Lower values = faster computation but less detail
 # The heatmap is smoothly upscaled to full resolution for display
 HEATMAP_RESOLUTION_SCALE = 0.25
+
+# Help text
+HELP_TEXT = """ROBOT LOCALIZATION VIA MODERN HOPFIELD NETWORKS
+
+PURPOSE:
+This program demonstrates robot localization using a Modern Hopfield Network.
+The robot moves on a 2D map and uses visual observations to determine its position.
+The network stores patterns from known positions and retrieves the closest match
+to localize the robot in real-time.
+
+GETTING STARTED:
+1. Create or import a map using the toolbar buttons
+2. Click "Sample & Train" to build the localization database
+3. Use keyboard controls to move the robot around
+4. Watch the network predict the robot's position (green dot)
+
+KEYBOARD CONTROLS:
+• W/A/S/D - Move robot up/left/down/right
+• J/L - Rotate robot left/right
+
+TOOLBAR BUTTONS:
+• Edit Map - Open map editor to draw custom maps
+• Import Map - Load a map from a PNG file
+• Export Map - Save the current map to a PNG file
+• Sample & Train - Generate observation samples and train the network
+• Help - Show this help dialog
+
+SETTINGS:
+• Blur Radius - Amount of blur applied to camera observations
+• Field of View - Viewing angle of the robot's camera (30-360°)
+• Visibility Index - How far the robot can see (0.01-1.0)
+• Beta (Inverse Temp) - Sharpness of retrieval (higher = more selective)
+• Combine top k matches - Number of closest matches to average for prediction
+• Noise Settings - Add random circular obstacles to the map
+• Interleaved RGB encoding - Alternative pattern encoding method
+
+CONFIDENCE STATISTICS:
+• Show confidence computation positions - Display test positions (blue dots)
+• Show confidence heatmap - Overlay confidence values across the map
+• Average heatmap across all angles - Build the heatmap by averaging confidence over all orientations
+
+VISUAL INDICATORS:
+• Red dots - Sample positions where patterns were captured
+• Blue robot - Ground truth position (your actual position)
+• Green dot - Estimated position (network's prediction)
+• Purple line - Estimated orientation direction
+• Blue viewing cone - Robot's current field of view
+• Black lines - Connections between top-k matches and final prediction
+
+DISPLAY PANELS:
+• Current Input - What the robot currently sees
+• Retrieved Memory - The closest matching stored pattern
+• Similarity Metric - Confidence score of the match (0-100%)
+"""

@@ -148,6 +148,10 @@ class App:
                              text=btn_text, command=command)
             btn.pack(side=tk.LEFT, padx=5)
 
+        help_btn = ttk.Button(self.toolbar_frame,
+                              text="Help", command=self.show_help)
+        help_btn.pack(side=tk.RIGHT, padx=5)
+
     def create_left_panel(self):
         self.left_panel = ttk.Frame(self.content_frame)
         self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH,
@@ -377,6 +381,31 @@ class App:
             command=self.on_average_heatmap_toggle
         )
         self.average_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
+
+    def show_help(self):
+        """Display a help dialog with information about controls and features"""
+        help_window = tk.Toplevel(self.root)
+        help_window.title("Help - Robot Localization")
+        help_window.geometry("700x600")
+
+        frame = ttk.Frame(help_window, padding="10")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        text_widget = tk.Text(frame, wrap=tk.WORD, font=("Arial", 11),
+                              padx=10, pady=10)
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL,
+                                  command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        text_widget.insert("1.0", HELP_TEXT)
+        text_widget.configure(state="disabled")
+
+        close_btn = ttk.Button(help_window, text="Close",
+                               command=help_window.destroy)
+        close_btn.pack(pady=10)
 
     def on_show_test_positions_toggle(self):
         """Handle checkbox toggle for showing test positions"""
