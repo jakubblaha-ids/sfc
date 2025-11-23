@@ -1,3 +1,2 @@
--   noise/random objects
 -   visualize how far the cat sees
 -   stepping through

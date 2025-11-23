@@ -1,14 +1,16 @@
 import tkinter as tk
 from tkinter import filedialog, ttk
 from constants import *
-from PIL import Image, ImageTk, ImageFilter, ImageDraw
+from PIL import Image, ImageTk, ImageDraw
 from editor import MapEditor
 from config import ConfigManager
-from hopfield import ModernHopfieldNetwork
-from heatmap_builder import HeatmapBuilder
+from robot_state import RobotState
+from camera_simulator import CameraSimulator
+from localization_engine import LocalizationEngine
+from sampling_engine import SamplingEngine
+from confidence_analyzer import ConfidenceAnalyzer
 import math
 import os
-import numpy as np
 
 
 class App:
@@ -19,77 +21,57 @@ class App:
 
         self.config = ConfigManager()
 
+        # Logic components (separated from UI)
+        self.robot = RobotState()
+        self.camera = CameraSimulator(
+            cone_angle=CAMERA_FOV,
+            cone_length=40,
+            camera_samples=100,
+            blur_radius=CAMERA_BLUR_RADIUS,
+            visibility_index=0.1
+        )
+        self.localization = LocalizationEngine(
+            beta=DEFAULT_BETA,
+            interleaved_rgb=INTERLEAVED_RGB
+        )
+        self.sampling = SamplingEngine()
+        self.confidence = ConfidenceAnalyzer(MAP_WIDTH, MAP_HEIGHT)
+
+        # UI-related state
         self.robot_image = None
         self.tk_robot_image = None
         self.load_robot_image()
 
         self.current_map_image = Image.new(
             "RGB", (MAP_WIDTH, MAP_HEIGHT), "white")
-        # Cached map with noise applied - used for raytracing when noise is enabled
-        # This keeps the base map clean while allowing noise to affect robot's perception
         self.map_with_noise = None
         self.tk_map_image = None
 
-        self.robot_x = MAP_WIDTH // 2
-        self.robot_y = MAP_HEIGHT // 2
-        self.robot_radius = 5
-        self.robot_speed = 5
-        self.robot_angle = 0
-        self.robot_rotation_speed = 7.5  # Degrees per key press
-        self.cone_length = 40  # Length of the viewing cone
-        self.cone_angle = CAMERA_FOV  # Cone angle in degrees
-
-        self.camera_blur_radius = CAMERA_BLUR_RADIUS
-        self.visibility_index = 0.1  # Distance opacity factor (default 0.1)
-
-        self.beta = DEFAULT_BETA  # Inverse temperature parameter
-
         self.interleaved_rgb = tk.BooleanVar(value=INTERLEAVED_RGB)
 
-        self.noise_amount = DEFAULT_NOISE_AMOUNT  # Number of random objects
-        self.apply_noise = tk.BooleanVar(value=False)  # Whether to apply noise
-        # List of (x, y, radius) tuples for noise circles
+        self.noise_amount = DEFAULT_NOISE_AMOUNT
+        self.apply_noise = tk.BooleanVar(value=False)
         self.noise_circles = []
 
-        self.camera_samples = 100  # Number of pixel samples in the 1D strip
-        self.current_camera_view = None  # Store current camera strip
+        self.current_camera_view = None
 
-        self.sample_positions = []  # List of (x, y, angle) tuples
-        self.sample_embeddings = []  # List of embeddings (numpy arrays)
-        self.sample_views = []  # List of camera view images (PIL Images)
-        self.sample_dots = []  # Canvas IDs of sample dots
-
-        self.hopfield_network = None
-        self.is_trained = False
+        self.sample_dots = []
 
         self.estimated_x = None
         self.estimated_y = None
         self.estimated_angle = None
         self.retrieved_sample_idx = None
 
-        self.sample_similarities = None  # Array of similarity scores for each sample
+        self.test_position_dots = []
+        self.show_test_positions = tk.BooleanVar(value=False)
 
-        # Average confidence computed during evaluation (0.0 - 1.0)
-        self.average_confidence = None
-        self.confidence_num_tests = None  # Number of evaluation positions
-        self.test_positions = []
-        self.test_position_dots = []  # Canvas IDs of test position dots
-        self.show_test_positions = tk.BooleanVar(value=False)  # Checkbox state
-
-        self.show_confidence_heatmap = tk.BooleanVar(
-            value=False)  # Checkbox state
-        self.average_heatmap = tk.BooleanVar(
-            value=False)  # Checkbox for averaging heatmaps
-        self.heatmap_overlay = None  # PIL Image for the heatmap overlay
-        self.heatmap_grid_positions_by_angle = {}
-        self.heatmap_grid_confidences_by_angle = {}
-        self.heatmap_computed = False  # Flag to track if heatmap is computed
-        self.heatmap_angles = []  # List of angles for which heatmaps were computed
+        self.show_confidence_heatmap = tk.BooleanVar(value=False)
+        self.average_heatmap = tk.BooleanVar(value=False)
 
         self.hovered_sample_idx = None
 
         self.keys_pressed = set()
-        self.update_interval = 16  # ~60 FPS (16ms per frame)
+        self.update_interval = 16
 
         self.rotation_keys_pressed = set()
 
@@ -240,7 +222,7 @@ class App:
         blur_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.blur_value_label = ttk.Label(
-            blur_container, text=f"{self.camera_blur_radius:.1f}", anchor="w"
+            blur_container, text=f"{self.camera.blur_radius:.1f}", anchor="w"
         )
         self.blur_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -249,14 +231,14 @@ class App:
             blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
             command=self.on_blur_change
         )
-        self.blur_slider.set(self.camera_blur_radius)
+        self.blur_slider.set(self.camera.blur_radius)
         self.blur_slider.pack(fill=tk.X, padx=5, pady=5)
 
         fov_container = tk.LabelFrame(settings_frame, text="Field of View")
         fov_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.fov_value_label = ttk.Label(
-            fov_container, text=f"{self.cone_angle:.0f}°", anchor="w"
+            fov_container, text=f"{self.camera.cone_angle:.0f}°", anchor="w"
         )
         self.fov_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -264,7 +246,7 @@ class App:
             fov_container, from_=30, to=360, orient=tk.HORIZONTAL,
             command=self.on_fov_change
         )
-        self.fov_slider.set(self.cone_angle)
+        self.fov_slider.set(self.camera.cone_angle)
         self.fov_slider.pack(fill=tk.X, padx=5, pady=5)
 
         visibility_container = tk.LabelFrame(
@@ -273,7 +255,7 @@ class App:
         visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.visibility_value_label = ttk.Label(
-            visibility_container, text=f"{self.visibility_index:.2f}", anchor="w"
+            visibility_container, text=f"{self.camera.visibility_index:.2f}", anchor="w"
         )
         self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -281,7 +263,7 @@ class App:
             visibility_container, from_=0.01, to=1.0,
             orient=tk.HORIZONTAL, command=self.on_visibility_change
         )
-        self.visibility_slider.set(self.visibility_index)
+        self.visibility_slider.set(self.camera.visibility_index)
         self.visibility_slider.pack(fill=tk.X, padx=5, pady=5)
 
         beta_container = tk.LabelFrame(
@@ -290,7 +272,7 @@ class App:
         beta_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.beta_value_label = ttk.Label(
-            beta_container, text=f"{self.beta:.1f}", anchor="w"
+            beta_container, text=f"{DEFAULT_BETA:.1f}", anchor="w"
         )
         self.beta_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -298,7 +280,7 @@ class App:
             beta_container, from_=1.0, to=200.0, orient=tk.HORIZONTAL,
             command=self.on_beta_change
         )
-        self.beta_slider.set(self.beta)
+        self.beta_slider.set(DEFAULT_BETA)
         self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
 
         noise_container = tk.LabelFrame(
@@ -376,7 +358,7 @@ class App:
     def on_show_confidence_heatmap_toggle(self):
         """Handle checkbox toggle for showing confidence heatmap"""
         if self.show_confidence_heatmap.get():
-            if not self.heatmap_computed:
+            if not self.confidence.heatmap_computed:
                 self.compute_confidence_heatmap()
         self.update_map_display()
 
@@ -386,35 +368,34 @@ class App:
 
     def on_blur_change(self, value):
         """Handle blur slider change"""
-        self.camera_blur_radius = float(value)
-        self.blur_value_label.config(text=f"{self.camera_blur_radius:.1f}")
+        self.camera.blur_radius = float(value)
+        self.blur_value_label.config(text=f"{self.camera.blur_radius:.1f}")
         self.update_map_display()
 
     def on_fov_change(self, value):
         """Handle FOV slider change"""
-        self.cone_angle = float(value)
-        self.fov_value_label.config(text=f"{self.cone_angle:.0f}°")
+        self.camera.cone_angle = float(value)
+        self.fov_value_label.config(text=f"{self.camera.cone_angle:.0f}°")
         self.update_map_display()
 
     def on_visibility_change(self, value):
         """Handle visibility index slider change"""
-        self.visibility_index = float(value)
-        self.visibility_value_label.config(text=f"{self.visibility_index:.2f}")
+        self.camera.visibility_index = float(value)
+        self.visibility_value_label.config(
+            text=f"{self.camera.visibility_index:.2f}")
         self.update_map_display()
 
     def on_beta_change(self, value):
         """Handle beta slider change"""
-        self.beta = float(value)
-        self.beta_value_label.config(text=f"{self.beta:.1f}")
-
-        if self.hopfield_network is not None:
-            self.hopfield_network.beta = self.beta
-            if self.is_trained:
-                self.update_map_display()
+        beta = float(value)
+        self.beta_value_label.config(text=f"{beta:.1f}")
+        self.localization.update_beta(beta)
+        if self.localization.is_trained:
+            self.update_map_display()
 
     def on_interleaved_rgb_toggle(self):
         """Handle interleaved RGB checkbox toggle"""
-        if self.is_trained:
+        if self.localization.is_trained:
             self.status_label['text'] = "⚠️ Retraining required: Changing RGB encoding requires retraining. Click 'Sample & Train' again."
 
     def on_noise_change(self, value):
@@ -466,72 +447,25 @@ class App:
         Pre-compute confidence values at a dense grid of positions for each direction.
         Creates separate heatmaps for each of the SAMPLE_ROTATIONS angles.
         """
-        if not self.is_trained or self.hopfield_network is None:
+        if not self.localization.is_trained:
             self.status_label['text'] = "⚠️ Network not trained. Please use 'Sample & Train' first before computing confidence heatmap."
             self.show_confidence_heatmap.set(False)
             return
 
-        self.heatmap_grid_positions_by_angle = {}
-        self.heatmap_grid_confidences_by_angle = {}
-        self.heatmap_angles = []
+        grid_positions_by_angle, _ = self.sampling.generate_heatmap_grid_positions()
 
-        grid_stride = SAMPLE_STRIDE // 2
-        half_stride = grid_stride // 2
+        def localization_callback(x, y, angle):
+            map_image = self.get_map_for_raytracing()
+            camera_view = self.camera.capture_view(x, y, angle, map_image)
+            return self.localization.localize(camera_view)
 
-        x_positions = list(range(half_stride, MAP_WIDTH, grid_stride))
-        y_positions = list(range(half_stride, MAP_HEIGHT, grid_stride))
+        result = self.confidence.compute_confidence_heatmap(
+            grid_positions_by_angle, localization_callback)
 
-        test_angles = [i * (360 / SAMPLE_ROTATIONS)
-                       for i in range(SAMPLE_ROTATIONS)]
-        self.heatmap_angles = test_angles
-
-        original_x = self.robot_x
-        original_y = self.robot_y
-        original_angle = self.robot_angle
-
-        total_evaluations = len(
-            x_positions) * len(y_positions) * len(test_angles)
-        evaluated_count = 0
-
-        # One-time status update before the potentially long computation.
-        self.status_label['text'] = f"Computing heatmap: 0/{total_evaluations}"
-
-        for angle_idx, test_angle in enumerate(test_angles):
-            positions_for_angle = []
-            confidences_for_angle = []
-
-            for x in x_positions:
-                for y in y_positions:
-                    self.robot_x = x
-                    self.robot_y = y
-                    self.robot_angle = test_angle
-
-                    self.capture_camera_view()
-
-                    query_embedding = self.create_embedding(
-                        self.current_camera_view)
-
-                    _best_idx, best_weight = self.hopfield_network.retrieve(
-                        query_embedding, top_k=1)
-
-                    confidence = best_weight[0]
-                    positions_for_angle.append((x, y))
-                    confidences_for_angle.append(confidence)
-
-                    evaluated_count += 1
-
-            self.heatmap_grid_positions_by_angle[test_angle] = positions_for_angle
-            self.heatmap_grid_confidences_by_angle[test_angle] = confidences_for_angle
-
-        self.robot_x = original_x
-        self.robot_y = original_y
-        self.robot_angle = original_angle
-
-        self.heatmap_computed = True
-
-        # Final one-time status update after computation finishes.
-        self.status_label[
-            'text'] = f"✓ Heatmap computed: {total_evaluations} positions across {len(test_angles)} angles."
+        if result:
+            self.status_label['text'] = f"✓ Heatmap computed: {
+                result['total_evaluations']}  positions across {
+                len(result['angles'])}  angles."
 
     def open_map_editor(self):
         MapEditor(self.root, self.current_map_image, self.on_map_saved)
@@ -656,13 +590,10 @@ class App:
         """
         self.auto_sample(show_message=False)
 
-        if len(self.sample_embeddings) > 0:
+        if self.localization.get_num_samples() > 0:
             self.train_network(show_message=False)
 
-            # Single final status update (avoid frequent UI updates during work)
-            self.status_label['text'] = f"✓ Generated {
-                len(self.sample_positions)}  samples and trained network with {
-                len(self.sample_embeddings)}  patterns"
+            self.status_label['text'] = f"✓ Generated {self.localization.get_num_samples()} samples and trained network with {self.localization.get_num_samples()} patterns"
 
     def auto_sample(self, show_message=True):
         """
@@ -673,59 +604,32 @@ class App:
         Args:
             show_message: Whether to show success message (default True)
         """
-        self.sample_positions = []
-        self.sample_embeddings = []
-        self.sample_views = []
+        self.localization.clear_samples()
         self.clear_sample_dots()
 
-        half_stride = SAMPLE_STRIDE // 2
-        x_positions = list(range(half_stride, MAP_WIDTH, SAMPLE_STRIDE))
-        y_positions = list(range(half_stride, MAP_HEIGHT, SAMPLE_STRIDE))
+        sample_positions = self.sampling.generate_sample_positions()
+        total_samples = len(sample_positions)
 
-        angles = [i * (360 / SAMPLE_ROTATIONS)
-                  for i in range(SAMPLE_ROTATIONS)]
+        original_state = self.robot.copy_state()
 
-        original_x = self.robot_x
-        original_y = self.robot_y
-        original_angle = self.robot_angle
-
-        total_samples = len(x_positions) * len(y_positions) * len(angles)
-        sample_count = 0
-
-        # One-time status before sampling starts
         self.status_label['text'] = f"Sampling: 0/{total_samples}"
 
-        for x in x_positions:
-            for y in y_positions:
-                for angle in angles:
-                    self.robot_x = x
-                    self.robot_y = y
-                    self.robot_angle = angle
+        map_image = self.get_map_for_raytracing()
 
-                    self.capture_camera_view()
+        for x, y, angle in sample_positions:
+            camera_view = self.camera.capture_view(x, y, angle, map_image)
+            self.localization.add_sample(x, y, angle, camera_view)
 
-                    embedding = self.create_embedding(self.current_camera_view)
-
-                    self.sample_positions.append((x, y, angle))
-                    self.sample_embeddings.append(embedding)
-                    self.sample_views.append(self.current_camera_view.copy())
-
-                    sample_count += 1
-
-        # Restore original pose and refresh UI once
-        self.robot_x = original_x
-        self.robot_y = original_y
-        self.robot_angle = original_angle
+        self.robot.restore_state(original_state)
 
         self.update_map_display()
         self.draw_sample_dots()
 
-        # Clear status and optionally show final message
         self.status_label['text'] = ""
 
         if show_message:
             self.status_label['text'] = f"✓ Generated {
-                len(self.sample_positions)}  samples"
+                self.localization.get_num_samples()}  samples"
 
     def train_network(self, show_message=True):
         """
@@ -734,43 +638,29 @@ class App:
         Args:
             show_message: Whether to show success message (default True)
         """
-        if len(self.sample_embeddings) == 0:
+        if self.localization.get_num_samples() == 0:
             self.status_label['text'] = "❌ No samples available. Please run 'Sample & Train' first."
             return
 
-        embedding_dim = len(self.sample_embeddings[0])
-
-        self.hopfield_network = ModernHopfieldNetwork(
-            embedding_dim, beta=self.beta)
-
-        # One-time status before training starts
         self.status_label['text'] = f"Training: 0/{
-            len(self.sample_embeddings)} "
+            self.localization.get_num_samples()} "
 
-        try:
-            self.hopfield_network.train(self.sample_embeddings)
+        success = self.localization.train()
 
-            self.is_trained = True
-
-            self.heatmap_computed = False
-            self.heatmap_grid_positions_by_angle = {}
-            self.heatmap_grid_confidences_by_angle = {}
-            self.heatmap_angles = []
-
-            # Compute average confidence deterministically after training
+        if success:
+            self.confidence.reset()
             self.compute_average_confidence()
 
             if show_message:
-                if self.average_confidence is not None:
-                    self.status_label['text'] = f"✓ Network trained with {len(self.sample_embeddings)} patterns. Avg confidence: {self.average_confidence * 100:.1f}%"
+                if self.confidence.average_confidence is not None:
+                    self.status_label['text'] = f"✓ Network trained with {self.localization.get_num_samples()} patterns. Avg confidence: {self.confidence.average_confidence * 100:.1f}%"
                 else:
                     self.status_label['text'] = f"✓ Network trained with {
-                        len(self.sample_embeddings)}  patterns."
+                        self.localization.get_num_samples()}  patterns."
             else:
                 self.status_label['text'] = ""
-
-        except Exception as e:
-            self.status_label['text'] = f"❌ Training error: {str(e)}"
+        else:
+            self.status_label['text'] = "❌ Training error"
 
     def compute_average_confidence(self, num_tests=None):
         """
@@ -781,114 +671,35 @@ class App:
         Args:
             num_tests: maximum number of evaluation positions to use (default: 100)
         """
-        if not self.is_trained or self.hopfield_network is None:
+        if not self.localization.is_trained:
             return
 
-        original_x = self.robot_x
-        original_y = self.robot_y
-        original_angle = self.robot_angle
+        test_positions = self.sampling.generate_test_positions(num_tests)
+        map_image = self.get_map_for_raytracing()
 
-        grid_stride = max(1, SAMPLE_STRIDE // 2)
-        half_stride = max(0, grid_stride // 2)
+        def localization_callback(x, y, angle):
+            camera_view = self.camera.capture_view(x, y, angle, map_image)
+            return self.localization.localize(camera_view)
 
-        x_positions = list(range(half_stride, MAP_WIDTH, grid_stride))
-        y_positions = list(range(half_stride, MAP_HEIGHT, grid_stride))
-        test_angles = [i * (360 / SAMPLE_ROTATIONS)
-                       for i in range(SAMPLE_ROTATIONS)]
+        result = self.confidence.compute_average_confidence(
+            test_positions, localization_callback)
 
-        # Create full list of deterministic test positions (angle, x, y)
-        all_positions = []
-        for angle in test_angles:
-            for x in x_positions:
-                for y in y_positions:
-                    all_positions.append((x, y, angle))
-
-        # If num_tests is None, evaluate all positions; otherwise limit to
-        # the requested deterministic prefix of positions.
-        if num_tests is None:
-            selected_positions = all_positions
-        else:
-            selected_positions = all_positions[:max(0, int(num_tests))]
-
-        self.test_positions = []
-        total_confidence = 0.0
-        valid_tests = 0
-
-        total_to_run = len(selected_positions)
-
-        # One-time status before running confidence tests
-        self.status_label['text'] = f"Computing avg confidence: 0/{
-            total_to_run} "
-
-        count = 0
-        for x, y, angle in selected_positions:
-            self.robot_x = x
-            self.robot_y = y
-            self.robot_angle = angle
-
-            self.capture_camera_view()
-
-            query_embedding = self.create_embedding(self.current_camera_view)
-
-            best_idx, best_weight = self.hopfield_network.retrieve(
-                query_embedding, top_k=1)
-
-            # best_weight is an array-like; take first value
-            confidence = float(best_weight[0])
-            total_confidence += confidence
-            valid_tests += 1
-
-            # store only image coordinates for plotting test points
-            self.test_positions.append((x, y))
-
-            count += 1
-
-        self.robot_x = original_x
-        self.robot_y = original_y
-        self.robot_angle = original_angle
-
-        if valid_tests > 0:
-            self.average_confidence = total_confidence / valid_tests
-            self.confidence_num_tests = valid_tests
+        if result:
             self.update_statistics_display()
-        # Final status update after computation
+
         self.status_label['text'] = ""
 
     def update_statistics_display(self):
         """Update the statistics display with confidence information"""
-        if self.average_confidence is not None:
-            stats_text = f"Test Positions: {self.confidence_num_tests}\n"
+        if self.confidence.average_confidence is not None:
+            stats_text = f"Test Positions: {
+                self.confidence.confidence_num_tests} \n"
             stats_text += f"Avg Confidence: {
-                self.average_confidence * 100: .1f} %"
+                self.confidence.average_confidence * 100: .1f} %"
             self.stats_label.config(text=stats_text)
         else:
             self.stats_label.config(
                 text="Train the network to see confidence statistics")
-
-    def create_embedding(self, camera_view):
-        """
-        Create an embedding vector from a camera view image.
-        For MVP, we simply flatten the RGB values.
-
-        Args:
-            camera_view: PIL Image (1D strip)
-
-        Returns:
-            numpy array representing the embedding
-        """
-        pixels = list(camera_view.getdata())
-
-        if self.interleaved_rgb.get():
-            embedding = []
-            for r, g, b in pixels:
-                embedding.extend([r, g, b])
-        else:
-            r_channel = [pixel[0] for pixel in pixels]
-            g_channel = [pixel[1] for pixel in pixels]
-            b_channel = [pixel[2] for pixel in pixels]
-            embedding = r_channel + g_channel + b_channel
-
-        return np.array(embedding, dtype=np.float32)
 
     def clear_sample_dots(self):
         """Remove all sample dots from the canvas"""
@@ -900,15 +711,14 @@ class App:
         """Draw red dots at sample positions on the canvas, sized by similarity"""
         self.clear_sample_dots()
 
+        sample_similarities = self.localization.sample_similarities
         max_similarity = None
-        if self.sample_similarities is not None and len(
-                self.sample_similarities) > 0:
-            max_similarity = max(self.sample_similarities.max(), 1e-6)
+        if sample_similarities is not None and len(sample_similarities) > 0:
+            max_similarity = max(sample_similarities.max(), 1e-6)
 
-        for i, (x, y, _angle) in enumerate(self.sample_positions):
-            if self.sample_similarities is not None and i < len(
-                    self.sample_similarities):
-                similarity = self.sample_similarities[i]
+        for i, (x, y, _angle) in enumerate(self.localization.sample_positions):
+            if sample_similarities is not None and i < len(sample_similarities):
+                similarity = sample_similarities[i]
                 min_radius = 1
                 max_radius = 5
 
@@ -947,7 +757,7 @@ class App:
 
         dot_radius = 2
 
-        for x, y in self.test_positions:
+        for x, y in self.confidence.test_positions:
             canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
             scaled_radius = dot_radius * self.map_scale_factor
 
@@ -988,16 +798,15 @@ class App:
         closest_idx = None
         min_distance = 15
 
+        sample_similarities = self.localization.sample_similarities
         max_similarity = None
-        if self.sample_similarities is not None and len(
-                self.sample_similarities) > 0:
-            max_similarity = max(self.sample_similarities.max(), 1e-6)
+        if sample_similarities is not None and len(sample_similarities) > 0:
+            max_similarity = max(sample_similarities.max(), 1e-6)
 
-        for i, (x, y, _angle) in enumerate(self.sample_positions):
+        for i, (x, y, _angle) in enumerate(self.localization.sample_positions):
             distance = math.sqrt((x - img_x)**2 + (y - img_y)**2)
-            if self.sample_similarities is not None and i < len(
-                    self.sample_similarities):
-                similarity = self.sample_similarities[i]
+            if sample_similarities is not None and i < len(sample_similarities):
+                similarity = sample_similarities[i]
                 min_radius = 1
                 max_radius = 5
 
@@ -1078,7 +887,7 @@ class App:
 
         self.draw_viewing_cone_on_image(display_image)
 
-        if self.show_confidence_heatmap.get() and self.sample_similarities is not None:
+        if self.show_confidence_heatmap.get():
             self.draw_confidence_heatmap_on_image(display_image)
 
         self._display_scaled_map_image(display_image)
@@ -1086,7 +895,7 @@ class App:
         self.capture_camera_view()
         self.display_camera_view()
 
-        if self.is_trained:
+        if self.localization.is_trained:
             self.localize()
 
         self.draw_sample_dots()
@@ -1097,12 +906,12 @@ class App:
 
     def draw_robot(self):
         canvas_robot_x, canvas_robot_y = self.image_to_canvas_coords(
-            self.robot_x, self.robot_y)
-        scaled_radius = self.robot_radius * self.map_scale_factor
+            self.robot.x, self.robot.y)
+        scaled_radius = self.robot.radius * self.map_scale_factor
 
         if self.robot_image is not None:
             rotated_image = self.robot_image.rotate(
-                -self.robot_angle, expand=True)
+                -self.robot.angle, expand=True)
 
             robot_size = int(50 * self.map_scale_factor)
             rotated_image = rotated_image.resize(
@@ -1156,82 +965,16 @@ class App:
             )
 
     def draw_confidence_heatmap_on_image(self, image):
-        """Draw a smooth 2D color gradient heatmap using HeatmapBuilder"""
-        if not self.heatmap_computed or not self.heatmap_angles:
-            return
-
-        builder = HeatmapBuilder(
-            map_width=MAP_WIDTH,
-            map_height=MAP_HEIGHT,
-            grid_stride=SAMPLE_STRIDE // 2,
-            resolution_scale=HEATMAP_RESOLUTION_SCALE
+        """Draw a smooth 2D color gradient heatmap using ConfidenceAnalyzer"""
+        heatmap_image = self.confidence.build_heatmap_image(
+            current_angle=self.robot.angle,
+            average_all_angles=self.average_heatmap.get(),
+            colormap='jet',
+            sigma=20.0
         )
-
-        if self.average_heatmap.get():
-            heatmap_image = builder.build_averaged_heatmap(
-                grid_positions_by_angle=self.heatmap_grid_positions_by_angle,
-                grid_confidences_by_angle=self.heatmap_grid_confidences_by_angle,
-                colormap_name='jet',
-                sigma=20.0,
-                alpha_base=100,
-                alpha_scale=155,
-                threshold=0.001
-            )
-        else:
-            closest_angle = self._find_closest_heatmap_angle(self.robot_angle)
-
-            if closest_angle is None:
-                return
-
-            grid_positions = self.heatmap_grid_positions_by_angle.get(
-                closest_angle, [])
-            grid_confidences = self.heatmap_grid_confidences_by_angle.get(
-                closest_angle, [])
-
-            if not grid_positions or not grid_confidences:
-                return
-
-            heatmap_image = builder.build_heatmap(
-                grid_positions=grid_positions,
-                grid_confidences=grid_confidences,
-                colormap_name='jet',
-                sigma=20.0,
-                alpha_base=100,
-                alpha_scale=155,
-                threshold=0.001
-            )
 
         if heatmap_image is not None:
             image.paste(heatmap_image, (0, 0), heatmap_image)
-
-    def _find_closest_heatmap_angle(self, current_angle):
-        """
-        Find the closest precomputed heatmap angle to the current robot angle.
-
-        Args:
-            current_angle: Current robot angle in degrees (0-360)
-
-        Returns:
-            The closest angle from self.heatmap_angles, or None if no angles available
-        """
-        if not self.heatmap_angles:
-            return None
-
-        current_angle = current_angle % 360
-
-        min_diff = float('inf')
-        closest = None
-
-        for angle in self.heatmap_angles:
-            diff = abs(angle - current_angle)
-            if diff > 180:
-                diff = 360 - diff
-
-            if diff < min_diff:
-                min_diff = diff
-                closest = angle
-
-        return closest
 
     def draw_noise_circles_on_image(self, image):
         """Draw random noise circles on the image"""
@@ -1246,141 +989,23 @@ class App:
 
     def draw_viewing_cone_on_image(self, image):
         """Draw the viewing cone with 50% transparency directly on a PIL image"""
-        half_cone = self.cone_angle / 2
-
-        points = [(self.robot_x, self.robot_y)]
-
-        num_points = 50
-        for i in range(num_points + 1):
-            angle_offset = -half_cone + (self.cone_angle * i / num_points)
-            current_angle = math.radians(self.robot_angle + angle_offset)
-
-            dx = math.cos(current_angle)
-            dy = math.sin(current_angle)
-
-            distance = self.cast_ray(
-                self.robot_x, self.robot_y, dx, dy)
-
-            x = self.robot_x + distance * dx
-            y = self.robot_y + distance * dy
-            points.append((x, y))
+        map_image = self.get_map_for_raytracing()
+        points = self.camera.get_viewing_cone_points(
+            self.robot.x, self.robot.y, self.robot.angle, map_image)
 
         overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
         cone_color = (0, 0, 255, 127)
-
         draw.polygon(points, fill=cone_color, outline=None)
 
         image.paste(overlay, (0, 0), overlay)
 
-    def get_distance_to_edge(self, x, y, dx, dy):
-        """Calculate the distance from (x, y) to the map edge in direction (dx, dy)"""
-        distances = []
-
-        if dx > 0:
-            t = (MAP_WIDTH - x) / dx
-            distances.append(t)
-        elif dx < 0:
-            t = -x / dx
-            distances.append(t)
-
-        if dy > 0:
-            t = (MAP_HEIGHT - y) / dy
-            distances.append(t)
-        elif dy < 0:
-            t = -y / dy
-            distances.append(t)
-
-        return min(distances) if distances else 0
-
-    def cast_ray(self, x, y, dx, dy):
-        """
-        Cast a ray from (x, y) in direction (dx, dy) until hitting a wall or map edge.
-        Returns the distance to the first obstacle.
-        """
-        max_distance = self.get_distance_to_edge(x, y, dx, dy)
-
-        step_size = 5.0
-
-        pixels = self.get_map_for_raytracing().load()
-
-        distance = 0
-        while distance < max_distance:
-            distance += step_size
-
-            current_x = x + distance * dx
-            current_y = y + distance * dy
-
-            pixel_x = int(round(current_x))
-            pixel_y = int(round(current_y))
-
-            if pixel_x < 0 or pixel_x >= MAP_WIDTH or pixel_y < 0 or pixel_y >= MAP_HEIGHT:
-                return distance
-
-            pixel_color = pixels[pixel_x, pixel_y]
-
-            if pixel_color[0] < 255 or pixel_color[1] < 255 or pixel_color[2] < 255:
-                return distance
-
-        return max_distance
-
     def capture_camera_view(self):
-        """
-        Capture a 1D strip of pixels from what the robot sees.
-        Samples pixels along rays cast from the robot's viewing direction.
-        Walls appear less opaque (more white) the further they are from the robot.
-        """
-        half_cone = self.cone_angle / 2
-        pixels = self.get_map_for_raytracing().load()
-
-        camera_strip = []
-
-        max_distance = self.cone_length
-
-        for i in range(self.camera_samples):
-            angle_offset = -half_cone + (self.cone_angle * i /
-                                         (self.camera_samples - 1))
-            current_angle = math.radians(self.robot_angle + angle_offset)
-
-            dx = math.cos(current_angle)
-            dy = math.sin(current_angle)
-
-            distance = self.cast_ray(self.robot_x, self.robot_y, dx, dy)
-
-            end_x = self.robot_x + distance * dx
-            end_y = self.robot_y + distance * dy
-
-            pixel_x = int(round(max(0, min(MAP_WIDTH - 1, end_x))))
-            pixel_y = int(round(max(0, min(MAP_HEIGHT - 1, end_y))))
-
-            color = pixels[pixel_x, pixel_y]
-
-            opacity = math.exp(-distance / max_distance * self.visibility_index)
-
-            blended_color = (
-                int(color[0] * opacity + 255 * (1 - opacity)),
-                int(color[1] * opacity + 255 * (1 - opacity)),
-                int(color[2] * opacity + 255 * (1 - opacity))
-            )
-
-            camera_strip.append(blended_color)
-
-        self.current_camera_view = Image.new('RGB', (self.camera_samples, 1))
-        self.current_camera_view.putdata(camera_strip)
-
-        if self.camera_blur_radius > 0:
-            temp_height = 10
-            temp_view = self.current_camera_view.resize(
-                (self.camera_samples, temp_height),
-                Image.Resampling.NEAREST
-            )
-            temp_view = temp_view.filter(ImageFilter.GaussianBlur(
-                radius=self.camera_blur_radius))
-            self.current_camera_view = temp_view.resize(
-                (self.camera_samples, 1),
-                Image.Resampling.BILINEAR
-            )
+        """Capture camera view using the camera simulator"""
+        map_image = self.get_map_for_raytracing()
+        self.current_camera_view = self.camera.capture_view(
+            self.robot.x, self.robot.y, self.robot.angle, map_image)
 
     def display_camera_view(self):
         """Display the camera view in the input canvas"""
@@ -1411,38 +1036,24 @@ class App:
         Perform localization using the trained Hopfield Network.
         Retrieves the closest matching pattern and estimates the robot's position.
         """
-        if not self.is_trained or self.hopfield_network is None:
+        if not self.localization.is_trained:
             return
 
         if self.current_camera_view is None:
             return
 
-        try:
-            query_embedding = self.create_embedding(self.current_camera_view)
+        result = self.localization.localize(self.current_camera_view)
 
-            all_indices, all_weights = self.hopfield_network.retrieve(
-                query_embedding, top_k=len(self.sample_embeddings))
+        if result:
+            self.estimated_x = result['x']
+            self.estimated_y = result['y']
+            self.estimated_angle = result['angle']
+            self.retrieved_sample_idx = result['sample_idx']
 
-            self.sample_similarities = np.zeros(len(self.sample_embeddings))
-            for idx, weight in zip(all_indices, all_weights):
-                self.sample_similarities[idx] = weight
-
-            best_idx = all_indices[0]
-            best_weight = all_weights[0]
-
-            self.retrieved_sample_idx = best_idx
-
-            x, y, angle = self.sample_positions[best_idx]
-            self.estimated_x = x
-            self.estimated_y = y
-            self.estimated_angle = angle
-
-            self.display_retrieved_memory(best_idx, best_weight)
-
-            self.display_similarity_metric(best_weight)
-
-        except Exception as e:
-            print(f"Localization error: {e}")
+            self.display_retrieved_memory(
+                result['sample_idx'],
+                result['confidence'])
+            self.display_similarity_metric(result['confidence'])
 
     def display_retrieved_memory(self, sample_idx, weight):
         """
@@ -1452,10 +1063,11 @@ class App:
             sample_idx: Index of the retrieved sample
             weight: Attention weight/confidence score
         """
-        if sample_idx < 0 or sample_idx >= len(self.sample_views):
+        sample_info = self.localization.get_sample_info(sample_idx)
+        if not sample_info:
             return
 
-        saved_view = self.sample_views[sample_idx]
+        saved_view = sample_info['view']
 
         canvas_width = self.memory_canvas.winfo_width()
         canvas_height = self.memory_canvas.winfo_height()
@@ -1474,8 +1086,8 @@ class App:
         self.memory_canvas.delete("all")
         self.memory_canvas.create_image(0, 0, image=tk_image, anchor="nw")
 
-        x, y, angle = self.sample_positions[sample_idx]
-        info_text = f"({x}, {y}), {angle: .1f} ° | Weight: {weight: .4f} "
+        x, y, angle = sample_info['x'], sample_info['y'], sample_info['angle']
+        info_text = f"({x}, {y}), {angle:.1f}° | Weight: {weight:.4f}"
         self.memory_frame.config(text=f"Retrieved Memory: {info_text}")
 
         self.memory_canvas.image = tk_image
@@ -1498,10 +1110,11 @@ class App:
         Args:
             sample_idx: Index of the sample to display
         """
-        if sample_idx < 0 or sample_idx >= len(self.sample_views):
+        sample_info = self.localization.get_sample_info(sample_idx)
+        if not sample_info:
             return
 
-        saved_view = self.sample_views[sample_idx]
+        saved_view = sample_info['view']
 
         canvas_width = self.memory_canvas.winfo_width()
         canvas_height = self.memory_canvas.winfo_height()
@@ -1512,7 +1125,7 @@ class App:
 
         scaled_image = saved_view.resize(
             (canvas_width, canvas_height),
-            Image.Resampling.NEAREST  # Use nearest neighbor to keep sharp pixels
+            Image.Resampling.NEAREST
         )
 
         tk_image = ImageTk.PhotoImage(scaled_image)
@@ -1520,7 +1133,7 @@ class App:
         self.memory_canvas.delete("all")
         self.memory_canvas.create_image(0, 0, image=tk_image, anchor="nw")
 
-        x, y, angle = self.sample_positions[sample_idx]
+        x, y, angle = sample_info['x'], sample_info['y'], sample_info['angle']
         info_text = f"Pos: ({x}, {y}), Angle: {angle:.1f}°"
         self.memory_frame.config(text=f"Retrieved Memory: {info_text}")
 
@@ -1528,21 +1141,12 @@ class App:
 
     def move_robot(self, dx, dy):
         """Update robot position"""
-        self.robot_x += dx
-        self.robot_y += dy
-
-        self.robot_x = max(self.robot_radius, min(
-            MAP_WIDTH - self.robot_radius, self.robot_x))
-        self.robot_y = max(self.robot_radius, min(
-            MAP_HEIGHT - self.robot_radius, self.robot_y))
-
+        self.robot.move(dx, dy)
         self.update_map_display()
 
     def rotate_robot(self, angle_delta):
         """Update robot angle by the specified delta (already a discrete step)"""
-        self.robot_angle += angle_delta
-        self.robot_angle = self.robot_angle % 360
-
+        self.robot.rotate(angle_delta)
         self.update_map_display()
 
     def on_key_press(self, key):
@@ -1567,18 +1171,18 @@ class App:
         d_angle = 0
 
         if 'w' in self.keys_pressed:
-            dy -= self.robot_speed
+            dy -= self.robot.speed
         if 's' in self.keys_pressed:
-            dy += self.robot_speed
+            dy += self.robot.speed
         if 'a' in self.keys_pressed:
-            dx -= self.robot_speed
+            dx -= self.robot.speed
         if 'd' in self.keys_pressed:
-            dx += self.robot_speed
+            dx += self.robot.speed
 
         if 'j' in self.rotation_keys_pressed:
-            d_angle -= self.robot_rotation_speed
+            d_angle -= self.robot.rotation_speed
         if 'l' in self.rotation_keys_pressed:
-            d_angle += self.robot_rotation_speed
+            d_angle += self.robot.rotation_speed
 
         if dx != 0 or dy != 0:
             self.move_robot(dx, dy)
