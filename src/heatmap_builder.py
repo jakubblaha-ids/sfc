@@ -11,7 +11,8 @@ class HeatmapBuilder:
     Creates a smooth 2D color gradient visualization using matplotlib colormaps.
     """
 
-    def __init__(self, map_width, map_height, grid_stride):
+    def __init__(self, map_width, map_height, grid_stride,
+                 resolution_scale=0.175):
         """
         Initialize the heatmap builder.
 
@@ -19,10 +20,15 @@ class HeatmapBuilder:
             map_width: Width of the map in pixels
             map_height: Height of the map in pixels
             grid_stride: Stride between grid points (for nearest-neighbor interpolation)
+            resolution_scale: Scale factor for heatmap resolution (default: 0.25 = 1/4 resolution)
+                             Lower values = faster computation but less detail
         """
         self.map_width = map_width
         self.map_height = map_height
         self.grid_stride = grid_stride
+        self.resolution_scale = resolution_scale
+        self.heatmap_width = int(map_width * resolution_scale)
+        self.heatmap_height = int(map_height * resolution_scale)
 
     def build_heatmap(
         self,
@@ -52,32 +58,26 @@ class HeatmapBuilder:
         if not grid_positions or not grid_confidences:
             return None
 
-        # Create a 2D grid for the entire map
-        confidence_grid = np.zeros(
-            (self.map_height, self.map_width), dtype=np.float32)
-
         # Get max confidence for normalization
         max_confidence = max(grid_confidences) if grid_confidences else 1.0
 
-        # Create a dictionary for fast lookup of confidence values
-        confidence_dict = {}
-        for (x, y), conf in zip(grid_positions, grid_confidences):
-            confidence_dict[(int(x), int(y))] = conf / max_confidence
-
-        # Use scipy's griddata for smooth interpolation
+        # Use scipy's griddata for smooth interpolation at lower resolution
         confidence_grid = self._populate_grid_interpolated(
             grid_positions, grid_confidences, max_confidence)
 
         # Apply Gaussian smoothing for even smoother gradient
-        smoothed_grid = gaussian_filter(confidence_grid, sigma=sigma)
+        # Scale sigma proportionally to the resolution
+        scaled_sigma = sigma * self.resolution_scale
+        smoothed_grid = gaussian_filter(confidence_grid, sigma=scaled_sigma)
 
         # Debug: print some stats
         print(
-            f"Heatmap stats - Min: {smoothed_grid.min():.4f}, Max: {smoothed_grid.max():.4f}, "
+            f"Heatmap stats (res: {self.heatmap_width}x{self.heatmap_height}) - "
+            f"Min: {smoothed_grid.min():.4f}, Max: {smoothed_grid.max():.4f}, "
             f"Mean: {smoothed_grid.mean():.4f}, Non-zero pixels: {np.count_nonzero(smoothed_grid)}"
         )
 
-        # Apply colormap and create RGBA image
+        # Apply colormap and create RGBA image at low resolution
         heatmap_image = self._apply_colormap(
             smoothed_grid,
             colormap_name,
@@ -86,12 +86,19 @@ class HeatmapBuilder:
             threshold
         )
 
+        # Upscale the heatmap to full resolution using smooth interpolation
+        if self.resolution_scale < 1.0:
+            heatmap_image = heatmap_image.resize(
+                (self.map_width, self.map_height),
+                Image.Resampling.LANCZOS
+            )
+
         return heatmap_image
 
     def _populate_grid_interpolated(
             self, grid_positions, grid_confidences, max_confidence):
         """
-        Populate the confidence grid using smooth interpolation.
+        Populate the confidence grid using smooth interpolation at reduced resolution.
 
         Args:
             grid_positions: List of (x, y) tuples
@@ -102,17 +109,17 @@ class HeatmapBuilder:
             2D numpy array with interpolated values
         """
         # Extract x, y coordinates and normalized confidence values
-        points = np.array(grid_positions)
+        # Scale positions to match the lower resolution grid
+        points = np.array(grid_positions) * self.resolution_scale
         values = np.array(grid_confidences) / max_confidence
 
-        # Create grid of points where we want to interpolate
-        grid_y, grid_x = np.mgrid[0:self.map_height, 0:self.map_width]
+        # Create grid of points where we want to interpolate (at lower resolution)
+        grid_y, grid_x = np.mgrid[0:self.heatmap_height, 0:self.heatmap_width]
 
-        # Use cubic interpolation for smoothest results
-        # 'cubic' gives smoothest but can be slow, 'linear' is faster
+        # Use linear interpolation (much faster than cubic and still smooth after Gaussian blur)
         confidence_grid = griddata(
             points, values, (grid_x, grid_y),
-            method='cubic',
+            method='linear',
             fill_value=0.0
         )
 

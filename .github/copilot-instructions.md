@@ -12,3 +12,4 @@ You are working on a modern Hopfield network–based demo for **robot localizati
 
 -   More context can be found in the `docs` folder. The whole specification is/will be stored there.
 -   Never try to run any commands.
+-   Do not generate comments that state the obvious

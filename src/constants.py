@@ -46,3 +46,9 @@ INTERLEAVED_RGB = True
 # Higher beta = sharper, more confident retrievals
 # Lower beta = softer, more distributed retrievals
 DEFAULT_BETA = 50.0
+
+# Heatmap rendering parameters
+# Resolution scale for heatmap computation (0.25 = 1/4 resolution)
+# Lower values = faster computation but less detail
+# The heatmap is smoothly upscaled to full resolution for display
+HEATMAP_RESOLUTION_SCALE = 0.25

@@ -15,16 +15,7 @@ class App:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Robot Localization via Modern Hopfield Networks")
-        # Start the window maximized (best-effort cross-platform)
-        try:
-            self.root.state('zoomed')
-        except Exception:
-            try:
-                screen_w = self.root.winfo_screenwidth()
-                screen_h = self.root.winfo_screenheight()
-                self.root.geometry(f"{screen_w}x{screen_h}+0+0")
-            except Exception:
-                self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+        self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
 
         self.config = ConfigManager()
 
@@ -121,28 +112,21 @@ class App:
             '<KeyPress-l>', lambda e: self.on_rotation_key_press('l'))
         self.root.bind('<KeyRelease-l>',
                        lambda e: self.on_rotation_key_release('l'))
-        self.root.bind('<F10>', lambda e: self.toggle_maximize())
 
     def create_layout(self):
         self.main_container = ttk.Frame(self.root)
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
         self.toolbar_frame = ttk.Frame(self.main_container)
-        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X,
-                                padx=PANEL_PADDING, pady=(PANEL_PADDING, 0))
+        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X)
 
         self.content_frame = ttk.Frame(self.main_container)
-        self.content_frame.pack(
-            side=tk.TOP, fill=tk.BOTH, expand=True, padx=PANEL_PADDING,
-            pady=PANEL_PADDING)
+        self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         self.status_frame = ttk.Frame(self.main_container)
-        self.status_frame.pack(
-            side=tk.BOTTOM, fill=tk.X, padx=PANEL_PADDING,
-            pady=(0, PANEL_PADDING))
+        self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-        self.status_label = ttk.Label(
-            self.status_frame, text="", anchor="w")
+        self.status_label = ttk.Label(self.status_frame, text="", anchor="w")
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def create_toolbar(self):
@@ -154,25 +138,17 @@ class App:
         }
 
         for btn_text, command in buttons.items():
-            btn = ttk.Button(
-                self.toolbar_frame,
-                text=btn_text,
-                command=command
-            )
-            btn.pack(side=tk.LEFT, padx=5, pady=5)
+            btn = ttk.Button(self.toolbar_frame,
+                             text=btn_text, command=command)
+            btn.pack(side=tk.LEFT)
 
     def create_left_panel(self):
         self.left_panel = ttk.Frame(self.content_frame)
         self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        lbl = ttk.Label(
-            self.left_panel, text="World View (God Mode)",
-            font=("Arial", 12, "bold"))
-        lbl.pack(side=tk.TOP, pady=5)
-
         self.map_canvas = tk.Canvas(
             self.left_panel, highlightthickness=1, bg="#f0f0f0")
-        self.map_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.map_canvas.pack(fill=tk.BOTH, expand=True)
 
         self.map_canvas.bind('<Motion>', self.on_canvas_hover)
         self.map_canvas.bind('<Configure>', self.on_map_canvas_resize)
@@ -180,48 +156,47 @@ class App:
         self.map_canvas.create_text(
             MAP_WIDTH // 2, MAP_HEIGHT // 2,
             text=f"Map Area ({MAP_WIDTH}x{MAP_HEIGHT})",
-            fill="gray")
+            fill="gray"
+        )
 
     def create_right_panel(self):
         self.right_panel = ttk.Frame(self.content_frame, width=400)
-        self.right_panel.pack(side=tk.LEFT, fill=tk.Y,
-                              expand=False, padx=(PANEL_PADDING, 0))
+        self.right_panel.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=10)
         self.right_panel.pack_propagate(False)
 
-        lbl = ttk.Label(self.right_panel, text="Robot Perception",
-                        font=("Arial", 12, "bold"))
-        lbl.pack(side=tk.TOP, pady=10)
-
-        input_frame = ttk.LabelFrame(
-            self.right_panel, text="Current Input", padding=5)
-        input_frame.pack(fill=tk.X, padx=10, pady=10)
+        input_frame = ttk.LabelFrame(self.right_panel, text="Current Input")
+        input_frame.pack(fill=tk.X)
 
         self.input_canvas = tk.Canvas(
-            input_frame, height=50, highlightthickness=0, bg="#f0f0f0")
-        self.input_canvas.pack(fill=tk.X, pady=(5, 0))
+            input_frame, height=25, highlightthickness=0, bg="#f0f0f0")
+        self.input_canvas.pack(fill=tk.X)
 
         memory_frame = ttk.LabelFrame(
-            self.right_panel, text="Retrieved Memory", padding=5)
-        memory_frame.pack(fill=tk.X, padx=10, pady=10)
+            self.right_panel, text="Retrieved Memory")
+        self.memory_frame = memory_frame
+        memory_frame.pack(fill=tk.X)
 
         self.memory_canvas = tk.Canvas(
-            memory_frame, height=50, highlightthickness=0, bg="#f0f0f0")
-        self.memory_canvas.pack(fill=tk.X, pady=(5, 0))
+            memory_frame, height=25, highlightthickness=0, bg="#f0f0f0")
+        self.memory_canvas.pack(fill=tk.X)
 
-        sim_frame = ttk.LabelFrame(
-            self.right_panel, text="Similarity Metric", padding=5)
-        sim_frame.pack(fill=tk.X, padx=10, pady=10)
+        sim_frame = ttk.LabelFrame(self.right_panel, text="Similarity Metric")
+        sim_frame.pack(fill=tk.X)
 
-        self.sim_canvas = tk.Canvas(
-            sim_frame, height=40, highlightthickness=0, bg="#f0f0f0")
-        self.sim_canvas.pack(fill=tk.X, pady=(5, 0))
+        self.sim_label = ttk.Label(
+            sim_frame, text="Confidence: 0.0%", anchor=tk.CENTER)
+        self.sim_label.pack(fill=tk.X)
+
+        self.sim_progressbar = ttk.Progressbar(
+            sim_frame, mode='determinate', length=200)
+        self.sim_progressbar.pack(fill=tk.X)
 
         settings_frame = ttk.LabelFrame(
-            self.right_panel, text="Camera Settings", padding=10)
-        settings_frame.pack(fill=tk.X, padx=10, pady=10)
+            self.right_panel, text="Camera Settings")
+        settings_frame.pack(fill=tk.X)
 
         blur_container = ttk.Frame(settings_frame)
-        blur_container.pack(fill=tk.X, pady=5)
+        blur_container.pack(fill=tk.X)
 
         blur_label_frame = ttk.Frame(blur_container)
         blur_label_frame.pack(fill=tk.X)
@@ -229,20 +204,16 @@ class App:
         ttk.Label(blur_label_frame, text="Blur Radius:").pack(side=tk.LEFT)
         self.blur_value_label = ttk.Label(
             blur_label_frame, text=f"{self.camera_blur_radius:.1f}")
-        self.blur_value_label.pack(side=tk.LEFT, padx=5)
+        self.blur_value_label.pack(side=tk.LEFT)
 
         self.blur_slider = ttk.Scale(
-            blur_container,
-            from_=0.0,
-            to=5.0,
-            orient=tk.HORIZONTAL,
-            command=self.on_blur_change
-        )
+            blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
+            command=self.on_blur_change)
         self.blur_slider.set(self.camera_blur_radius)
-        self.blur_slider.pack(fill=tk.X, pady=(5, 0))
+        self.blur_slider.pack(fill=tk.X)
 
         fov_container = ttk.Frame(settings_frame)
-        fov_container.pack(fill=tk.X, pady=5)
+        fov_container.pack(fill=tk.X)
 
         fov_label_frame = ttk.Frame(fov_container)
         fov_label_frame.pack(fill=tk.X)
@@ -250,20 +221,16 @@ class App:
         ttk.Label(fov_label_frame, text="Field of View:").pack(side=tk.LEFT)
         self.fov_value_label = ttk.Label(
             fov_label_frame, text=f"{self.cone_angle:.0f}°")
-        self.fov_value_label.pack(side=tk.LEFT, padx=5)
+        self.fov_value_label.pack(side=tk.LEFT)
 
         self.fov_slider = ttk.Scale(
-            fov_container,
-            from_=30,
-            to=360,
-            orient=tk.HORIZONTAL,
-            command=self.on_fov_change
-        )
+            fov_container, from_=30, to=360, orient=tk.HORIZONTAL,
+            command=self.on_fov_change)
         self.fov_slider.set(self.cone_angle)
-        self.fov_slider.pack(fill=tk.X, pady=(5, 0))
+        self.fov_slider.pack(fill=tk.X)
 
         visibility_container = ttk.Frame(settings_frame)
-        visibility_container.pack(fill=tk.X, pady=5)
+        visibility_container.pack(fill=tk.X)
 
         visibility_label_frame = ttk.Frame(visibility_container)
         visibility_label_frame.pack(fill=tk.X)
@@ -273,20 +240,16 @@ class App:
             side=tk.LEFT)
         self.visibility_value_label = ttk.Label(
             visibility_label_frame, text=f"{self.visibility_index:.2f}")
-        self.visibility_value_label.pack(side=tk.LEFT, padx=5)
+        self.visibility_value_label.pack(side=tk.LEFT)
 
         self.visibility_slider = ttk.Scale(
-            visibility_container,
-            from_=0.01,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            command=self.on_visibility_change
-        )
+            visibility_container, from_=0.01, to=1.0, orient=tk.HORIZONTAL,
+            command=self.on_visibility_change)
         self.visibility_slider.set(self.visibility_index)
-        self.visibility_slider.pack(fill=tk.X, pady=(5, 0))
+        self.visibility_slider.pack(fill=tk.X)
 
         beta_container = ttk.Frame(settings_frame)
-        beta_container.pack(fill=tk.X, pady=5)
+        beta_container.pack(fill=tk.X)
 
         beta_label_frame = ttk.Frame(beta_container)
         beta_label_frame.pack(fill=tk.X)
@@ -296,53 +259,41 @@ class App:
             side=tk.LEFT)
         self.beta_value_label = ttk.Label(
             beta_label_frame, text=f"{self.beta:.1f}")
-        self.beta_value_label.pack(side=tk.LEFT, padx=5)
+        self.beta_value_label.pack(side=tk.LEFT)
 
         self.beta_slider = ttk.Scale(
-            beta_container,
-            from_=1.0,
-            to=200.0,
-            orient=tk.HORIZONTAL,
-            command=self.on_beta_change
-        )
+            beta_container, from_=1.0, to=200.0, orient=tk.HORIZONTAL,
+            command=self.on_beta_change)
         self.beta_slider.set(self.beta)
-        self.beta_slider.pack(fill=tk.X, pady=(5, 0))
+        self.beta_slider.pack(fill=tk.X)
 
         self.interleaved_rgb_checkbox = ttk.Checkbutton(
-            settings_frame,
-            text="Interleaved RGB encoding",
+            settings_frame, text="Interleaved RGB encoding",
             variable=self.interleaved_rgb,
-            command=self.on_interleaved_rgb_toggle
-        )
-        self.interleaved_rgb_checkbox.pack(fill=tk.X, pady=(10, 0))
+            command=self.on_interleaved_rgb_toggle)
+        self.interleaved_rgb_checkbox.pack(fill=tk.X)
 
         stats_frame = ttk.LabelFrame(
-            self.right_panel, text="Accuracy Statistics", padding=10)
-        stats_frame.pack(fill=tk.X, padx=10, pady=10)
+            self.right_panel, text="Accuracy Statistics")
+        stats_frame.pack(fill=tk.X)
 
         self.stats_label = ttk.Label(
-            stats_frame,
-            text="Train the network to see accuracy statistics",
+            stats_frame, text="Train the network to see accuracy statistics",
             font=("Arial", 9),
-            justify=tk.LEFT
-        )
-        self.stats_label.pack(fill=tk.X, pady=5)
+            justify=tk.LEFT)
+        self.stats_label.pack(fill=tk.X)
 
         self.show_test_positions_checkbox = ttk.Checkbutton(
-            stats_frame,
-            text="Show test positions",
+            stats_frame, text="Show test positions",
             variable=self.show_test_positions,
-            command=self.on_show_test_positions_toggle
-        )
-        self.show_test_positions_checkbox.pack(fill=tk.X, pady=(5, 0))
+            command=self.on_show_test_positions_toggle)
+        self.show_test_positions_checkbox.pack(fill=tk.X)
 
         self.show_confidence_heatmap_checkbox = ttk.Checkbutton(
-            stats_frame,
-            text="Show confidence heatmap",
+            stats_frame, text="Show confidence heatmap",
             variable=self.show_confidence_heatmap,
-            command=self.on_show_confidence_heatmap_toggle
-        )
-        self.show_confidence_heatmap_checkbox.pack(fill=tk.X, pady=(5, 0))
+            command=self.on_show_confidence_heatmap_toggle)
+        self.show_confidence_heatmap_checkbox.pack(fill=tk.X)
 
     def on_show_test_positions_toggle(self):
         """Handle checkbox toggle for showing test positions"""
@@ -446,7 +397,7 @@ class App:
 
                     evaluated_count += 1
 
-                    if evaluated_count % 20 == 0 or evaluated_count == total_evaluations:
+                    if evaluated_count % 1000 == 0 or evaluated_count == total_evaluations:
                         self.status_label['text'] = f"Computing heatmap: {
                             evaluated_count}/{total_evaluations} (angle {angle_idx + 1}/{len(test_angles)})"
                         self.root.update()
@@ -952,6 +903,7 @@ class App:
                 self.display_saved_sample(closest_idx)
             else:
                 self.memory_canvas.delete("all")
+                self.memory_frame.config(text="Retrieved Memory")
 
     def update_map_display_during_sampling(self):
         """Update map display during sampling to show robot position and camera view"""
@@ -1032,7 +984,7 @@ class App:
             rotated_image = self.robot_image.rotate(
                 -self.robot_angle, expand=True)
 
-            robot_size = int(100 * self.map_scale_factor)
+            robot_size = int(50 * self.map_scale_factor)
             rotated_image = rotated_image.resize(
                 (robot_size, robot_size),
                 Image.Resampling.LANCZOS)
@@ -1101,10 +1053,13 @@ class App:
         if not grid_positions or not grid_confidences:
             return
 
+        # Use lower resolution for faster computation
+        # The result is upscaled smoothly to full size
         builder = HeatmapBuilder(
             map_width=MAP_WIDTH,
             map_height=MAP_HEIGHT,
-            grid_stride=SAMPLE_STRIDE // 2
+            grid_stride=SAMPLE_STRIDE // 2,
+            resolution_scale=HEATMAP_RESOLUTION_SCALE
         )
 
         heatmap_image = builder.build_heatmap(
@@ -1380,15 +1335,8 @@ class App:
         self.memory_canvas.create_image(0, 0, image=tk_image, anchor="nw")
 
         x, y, angle = self.sample_positions[sample_idx]
-        info_text = f"Retrieved: ({x}, {y}), {
-            angle: .1f} ° | Weight: {
-            weight: .4f} "
-        self.memory_canvas.create_text(
-            canvas_width // 2, 10,
-            text=info_text,
-            fill="white",
-            font=("Arial", 9, "bold")
-        )
+        info_text = f"({x}, {y}), {angle: .1f} ° | Weight: {weight: .4f} "
+        self.memory_frame.config(text=f"Retrieved Memory: {info_text}")
 
         self.memory_canvas.image = tk_image
 
@@ -1399,35 +1347,9 @@ class App:
         Args:
             weight: Attention weight/confidence (0 to 1)
         """
-        canvas_width = self.sim_canvas.winfo_width()
-        canvas_height = self.sim_canvas.winfo_height()
-
-        if canvas_width <= 1:
-            canvas_width = 300
-            canvas_height = 40
-
-        self.sim_canvas.delete("all")
-
-        bar_height = 20
-        bar_y = canvas_height // 2 - bar_height // 2
-        self.sim_canvas.create_rectangle(
-            10, bar_y, canvas_width - 10, bar_y + bar_height,
-            fill="gray", outline="black"
-        )
-
-        bar_width = (canvas_width - 20) * weight
-        self.sim_canvas.create_rectangle(
-            10, bar_y, 10 + bar_width, bar_y + bar_height,
-            fill="green", outline=""
-        )
-
         percentage = weight * 100
-        self.sim_canvas.create_text(
-            canvas_width // 2, bar_y + bar_height // 2,
-            text=f"Confidence: {percentage:.1f}%",
-            fill="white",
-            font=("Arial", 10, "bold")
-        )
+        self.sim_progressbar['value'] = percentage
+        self.sim_label.config(text=f"Confidence: {percentage:.1f}%")
 
     def display_saved_sample(self, sample_idx):
         """
@@ -1460,12 +1382,7 @@ class App:
 
         x, y, angle = self.sample_positions[sample_idx]
         info_text = f"Pos: ({x}, {y}), Angle: {angle:.1f}°"
-        self.memory_canvas.create_text(
-            canvas_width // 2, 10,
-            text=info_text,
-            fill="white",
-            font=("Arial", 10, "bold")
-        )
+        self.memory_frame.config(text=f"Retrieved Memory: {info_text}")
 
         self.memory_canvas.image = tk_image
 
@@ -1530,25 +1447,6 @@ class App:
             self.rotate_robot(d_angle)
 
         self.root.after(self.update_interval, self.update_loop)
-
-    def toggle_maximize(self):
-        """Toggle maximized (zoomed) state on/off"""
-        try:
-            current = self.root.state()
-            if current == 'zoomed':
-                self.root.state('normal')
-            else:
-                self.root.state('zoomed')
-        except Exception:
-            try:
-                screen_w = self.root.winfo_screenwidth()
-                screen_h = self.root.winfo_screenheight()
-                if self.root.winfo_width() == screen_w and self.root.winfo_height() == screen_h:
-                    self.root.geometry(f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-                else:
-                    self.root.geometry(f"{screen_w}x{screen_h}+0+0")
-            except Exception:
-                pass
 
     def run(self):
         self.update_map_display()
