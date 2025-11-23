@@ -1,3 +1,1 @@
 -   visualize how far the cat sees
--   stepping through
--   all the parameters need to be saved in a config

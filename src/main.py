@@ -21,18 +21,28 @@ class App:
 
         self.config = ConfigManager()
 
+        # Load saved parameters or use defaults
+        self._blur_radius = self.config.get("blur_radius", CAMERA_BLUR_RADIUS)
+        self._fov = self.config.get("fov", CAMERA_FOV)
+        self._visibility_index = self.config.get("visibility_index", 0.1)
+        self._beta = self.config.get("beta", DEFAULT_BETA)
+        self._top_k = self.config.get("top_k", DEFAULT_TOP_K)
+        self._noise_amount = self.config.get("noise_amount", DEFAULT_NOISE_AMOUNT)
+        self._apply_noise = self.config.get("apply_noise", False)
+        self._interleaved_rgb = self.config.get("interleaved_rgb", INTERLEAVED_RGB)
+
         # Logic components (separated from UI)
         self.robot = RobotState()
         self.camera = CameraSimulator(
-            cone_angle=CAMERA_FOV,
+            cone_angle=self._fov,
             cone_length=40,
             camera_samples=100,
-            blur_radius=CAMERA_BLUR_RADIUS,
-            visibility_index=0.1
+            blur_radius=self._blur_radius,
+            visibility_index=self._visibility_index
         )
         self.localization = LocalizationEngine(
-            beta=DEFAULT_BETA,
-            interleaved_rgb=INTERLEAVED_RGB
+            beta=self._beta,
+            interleaved_rgb=self._interleaved_rgb
         )
         self.sampling = SamplingEngine()
         self.confidence = ConfidenceAnalyzer(MAP_WIDTH, MAP_HEIGHT)
@@ -47,10 +57,10 @@ class App:
         self.map_with_noise = None
         self.tk_map_image = None
 
-        self.interleaved_rgb = tk.BooleanVar(value=INTERLEAVED_RGB)
+        self.interleaved_rgb = tk.BooleanVar(value=self._interleaved_rgb)
 
-        self.noise_amount = DEFAULT_NOISE_AMOUNT
-        self.apply_noise = tk.BooleanVar(value=False)
+        self.noise_amount = self._noise_amount
+        self.apply_noise = tk.BooleanVar(value=self._apply_noise)
         self.noise_circles = []
 
         self.current_camera_view = None
@@ -69,7 +79,7 @@ class App:
         self.show_confidence_heatmap = tk.BooleanVar(value=False)
         self.average_heatmap = tk.BooleanVar(value=False)
 
-        self.top_k = DEFAULT_TOP_K
+        self.top_k = self._top_k
 
         self.hovered_sample_idx = None
 
@@ -231,7 +241,7 @@ class App:
             blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
             command=self.on_blur_change
         )
-        self.blur_slider.set(self.camera.blur_radius)
+        self.blur_slider.set(self._blur_radius)
         self.blur_slider.pack(fill=tk.X, padx=5, pady=5)
 
         fov_container = tk.LabelFrame(settings_frame, text="Field of View")
@@ -246,7 +256,7 @@ class App:
             fov_container, from_=30, to=360, orient=tk.HORIZONTAL,
             command=self.on_fov_change
         )
-        self.fov_slider.set(self.camera.cone_angle)
+        self.fov_slider.set(self._fov)
         self.fov_slider.pack(fill=tk.X, padx=5, pady=5)
 
         visibility_container = tk.LabelFrame(
@@ -263,7 +273,7 @@ class App:
             visibility_container, from_=0.01, to=1.0,
             orient=tk.HORIZONTAL, command=self.on_visibility_change
         )
-        self.visibility_slider.set(self.camera.visibility_index)
+        self.visibility_slider.set(self._visibility_index)
         self.visibility_slider.pack(fill=tk.X, padx=5, pady=5)
 
         beta_container = tk.LabelFrame(
@@ -272,7 +282,7 @@ class App:
         beta_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.beta_value_label = ttk.Label(
-            beta_container, text=f"{DEFAULT_BETA:.1f}", anchor="w"
+            beta_container, text=f"{self._beta:.1f}", anchor="w"
         )
         self.beta_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -280,7 +290,7 @@ class App:
             beta_container, from_=1.0, to=200.0, orient=tk.HORIZONTAL,
             command=self.on_beta_change
         )
-        self.beta_slider.set(DEFAULT_BETA)
+        self.beta_slider.set(self._beta)
         self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
 
         top_k_container = tk.LabelFrame(
@@ -289,7 +299,7 @@ class App:
         top_k_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.top_k_value_label = ttk.Label(
-            top_k_container, text=f"{DEFAULT_TOP_K}", anchor="w"
+            top_k_container, text=f"{self._top_k}", anchor="w"
         )
         self.top_k_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -297,7 +307,7 @@ class App:
             top_k_container, from_=1, to=20, orient=tk.HORIZONTAL,
             command=self.on_top_k_change
         )
-        self.top_k_slider.set(DEFAULT_TOP_K)
+        self.top_k_slider.set(self._top_k)
         self.top_k_slider.pack(fill=tk.X, padx=5, pady=5)
 
         noise_container = tk.LabelFrame(
@@ -306,7 +316,7 @@ class App:
         noise_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.noise_value_label = ttk.Label(
-            noise_container, text=f"{int(self.noise_amount)} objects", anchor="w"
+            noise_container, text=f"{int(self._noise_amount)} objects", anchor="w"
         )
         self.noise_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -314,7 +324,7 @@ class App:
             noise_container, from_=0, to=100, orient=tk.HORIZONTAL,
             command=self.on_noise_change
         )
-        self.noise_slider.set(self.noise_amount)
+        self.noise_slider.set(self._noise_amount)
         self.noise_slider.pack(fill=tk.X, padx=5, pady=5)
 
         self.apply_noise_checkbox = ttk.Checkbutton(
@@ -387,12 +397,14 @@ class App:
         """Handle blur slider change"""
         self.camera.blur_radius = float(value)
         self.blur_value_label.config(text=f"{self.camera.blur_radius:.1f}")
+        self.config.set("blur_radius", self.camera.blur_radius)
         self.update_map_display()
 
     def on_fov_change(self, value):
         """Handle FOV slider change"""
         self.camera.cone_angle = float(value)
         self.fov_value_label.config(text=f"{self.camera.cone_angle:.0f}°")
+        self.config.set("fov", self.camera.cone_angle)
         self.update_map_display()
 
     def on_visibility_change(self, value):
@@ -400,6 +412,7 @@ class App:
         self.camera.visibility_index = float(value)
         self.visibility_value_label.config(
             text=f"{self.camera.visibility_index:.2f}")
+        self.config.set("visibility_index", self.camera.visibility_index)
         self.update_map_display()
 
     def on_beta_change(self, value):
@@ -407,6 +420,7 @@ class App:
         beta = float(value)
         self.beta_value_label.config(text=f"{beta:.1f}")
         self.localization.update_beta(beta)
+        self.config.set("beta", beta)
         if self.localization.is_trained:
             self.update_map_display()
 
@@ -414,12 +428,14 @@ class App:
         """Handle top-k slider change"""
         self.top_k = int(float(value))
         self.top_k_value_label.config(text=f"{self.top_k}")
+        self.config.set("top_k", self.top_k)
         if self.localization.is_trained:
             self.localize()
             self.update_map_display()
 
     def on_interleaved_rgb_toggle(self):
         """Handle interleaved RGB checkbox toggle"""
+        self.config.set("interleaved_rgb", self.interleaved_rgb.get())
         if self.localization.is_trained:
             self.status_label['text'] = "⚠️ Retraining required: Changing RGB encoding requires retraining. Click 'Sample & Train' again."
 
@@ -427,12 +443,14 @@ class App:
         """Handle noise amount slider change"""
         self.noise_amount = int(float(value))
         self.noise_value_label.config(text=f"{self.noise_amount} objects")
+        self.config.set("noise_amount", self.noise_amount)
         if self.apply_noise.get():
             self.generate_noise_circles()
             self.update_map_display()
 
     def on_apply_noise_toggle(self):
         """Handle apply noise checkbox toggle"""
+        self.config.set("apply_noise", self.apply_noise.get())
         if self.apply_noise.get():
             self.generate_noise_circles()
         else:

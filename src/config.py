@@ -34,7 +34,15 @@ class ConfigManager:
     def _get_default_config(self):
         """Return default configuration"""
         return {
-            "last_map_path": None
+            "last_map_path": None,
+            "blur_radius": None,
+            "fov": None,
+            "visibility_index": None,
+            "beta": None,
+            "top_k": None,
+            "noise_amount": None,
+            "apply_noise": None,
+            "interleaved_rgb": None
         }
 
     def save_config(self):
