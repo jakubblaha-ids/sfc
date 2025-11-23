@@ -112,7 +112,7 @@ class App:
 
     def create_layout(self):
         self.main_container = tk.Frame(self.root)
-        self.main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.main_container.pack(fill=tk.BOTH, expand=True)
 
         self.toolbar_frame = tk.Frame(self.main_container)
         self.toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
@@ -159,50 +159,76 @@ class App:
         )
 
     def create_right_panel(self):
-        self.right_panel = tk.Frame(self.content_frame, width=400)
-        self.right_panel.pack(side=tk.LEFT, fill=tk.Y,
-                              expand=False, padx=5, pady=5)
-        self.right_panel.pack_propagate(False)
+        # Create a frame for the right panel with a scrollbar
+        right_panel_container = tk.Frame(self.content_frame, width=400)
+        right_panel_container.pack(
+            side=tk.LEFT, fill=tk.Y, expand=False, padx=(5, 10), pady=5)
+        right_panel_container.pack_propagate(False)
 
+        # Add a canvas and scrollbar for scrolling
+        canvas = tk.Canvas(right_panel_container)
+        scrollbar = tk.Scrollbar(
+            right_panel_container, orient=tk.VERTICAL, command=canvas.yview)
+        self.right_panel = tk.Frame(canvas)
+
+        self.right_panel.bind(
+            "<Configure>", lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")))
+
+        canvas.create_window((0, 0), window=self.right_panel, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Adjust the layout to prevent the scrollbar from overlapping the content
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+
+        # Add content to the right panel
         input_frame = tk.LabelFrame(self.right_panel, text="Current Input")
         input_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.input_canvas = tk.Canvas(
-            input_frame, height=25, highlightthickness=0, bg="#f0f0f0")
+            input_frame, height=25, highlightthickness=0, bg="#f0f0f0"
+        )
         self.input_canvas.pack(fill=tk.X, padx=5, pady=5)
 
         self.memory_frame = tk.LabelFrame(
-            self.right_panel, text="Retrieved Memory")
+            self.right_panel, text="Retrieved Memory"
+        )
         self.memory_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.memory_canvas = tk.Canvas(
-            self.memory_frame, height=25, highlightthickness=0, bg="#f0f0f0")
+            self.memory_frame, height=25, highlightthickness=0, bg="#f0f0f0"
+        )
         self.memory_canvas.pack(fill=tk.X, padx=5, pady=5)
 
         sim_frame = tk.LabelFrame(self.right_panel, text="Similarity Metric")
         sim_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.sim_label = tk.Label(
-            sim_frame, text="Confidence: 0.0%", anchor=tk.CENTER)
+            sim_frame, text="Confidence: 0.0%", anchor=tk.CENTER
+        )
         self.sim_label.pack(fill=tk.X, padx=5, pady=5)
 
         self.sim_progressbar = tk.Canvas(sim_frame, height=10, bg="#d9d9d9")
         self.sim_progressbar.pack(fill=tk.X, padx=5, pady=5)
 
         settings_frame = tk.LabelFrame(
-            self.right_panel, text="Camera Settings")
+            self.right_panel, text="Camera Settings"
+        )
         settings_frame.pack(fill=tk.X, padx=5, pady=5)
 
         blur_container = tk.LabelFrame(settings_frame, text="Blur Radius")
         blur_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.blur_value_label = tk.Label(
-            blur_container, text=f"{self.camera_blur_radius:.1f}")
+            blur_container, text=f"{self.camera_blur_radius:.1f}"
+        )
         self.blur_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.blur_slider = tk.Scale(
             blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
-            command=self.on_blur_change)
+            command=self.on_blur_change
+        )
         self.blur_slider.set(self.camera_blur_radius)
         self.blur_slider.pack(fill=tk.X, padx=5, pady=5)
 
@@ -210,40 +236,48 @@ class App:
         fov_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.fov_value_label = tk.Label(
-            fov_container, text=f"{self.cone_angle:.0f}°")
+            fov_container, text=f"{self.cone_angle:.0f}°"
+        )
         self.fov_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.fov_slider = tk.Scale(
             fov_container, from_=30, to=360, orient=tk.HORIZONTAL,
-            command=self.on_fov_change)
+            command=self.on_fov_change
+        )
         self.fov_slider.set(self.cone_angle)
         self.fov_slider.pack(fill=tk.X, padx=5, pady=5)
 
         visibility_container = tk.LabelFrame(
-            settings_frame, text="Visibility Index")
+            settings_frame, text="Visibility Index"
+        )
         visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.visibility_value_label = tk.Label(
-            visibility_container, text=f"{self.visibility_index:.2f}")
+            visibility_container, text=f"{self.visibility_index:.2f}"
+        )
         self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.visibility_slider = tk.Scale(
             visibility_container, from_=0.01, to=1.0, resolution=0.01,
-            orient=tk.HORIZONTAL, command=self.on_visibility_change)
+            orient=tk.HORIZONTAL, command=self.on_visibility_change
+        )
         self.visibility_slider.set(self.visibility_index)
         self.visibility_slider.pack(fill=tk.X, padx=5, pady=5)
 
         beta_container = tk.LabelFrame(
-            settings_frame, text="Beta (Inverse Temp)")
+            settings_frame, text="Beta (Inverse Temp)"
+        )
         beta_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.beta_value_label = tk.Label(
-            beta_container, text=f"{self.beta:.1f}")
+            beta_container, text=f"{self.beta:.1f}"
+        )
         self.beta_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.beta_slider = tk.Scale(
             beta_container, from_=1.0, to=200.0, orient=tk.HORIZONTAL,
-            command=self.on_beta_change)
+            command=self.on_beta_change
+        )
         self.beta_slider.set(self.beta)
         self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
 
@@ -255,7 +289,8 @@ class App:
         self.interleaved_rgb_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
         stats_frame = tk.LabelFrame(
-            self.right_panel, text="Accuracy Statistics")
+            self.right_panel, text="Accuracy Statistics"
+        )
         stats_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.stats_label = tk.Label(
