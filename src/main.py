@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import filedialog
 from constants import *
 from PIL import Image, ImageTk, ImageFilter, ImageDraw
 from editor import MapEditor
@@ -86,9 +86,6 @@ class App:
         self.map_offset_x = 0
         self.map_offset_y = 0
 
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
-
         self.create_layout()
         self.create_toolbar()
         self.create_left_panel()
@@ -114,20 +111,22 @@ class App:
                        lambda e: self.on_rotation_key_release('l'))
 
     def create_layout(self):
-        self.main_container = ttk.Frame(self.root)
-        self.main_container.pack(fill=tk.BOTH, expand=True)
+        self.main_container = tk.Frame(self.root)
+        self.main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        self.toolbar_frame = ttk.Frame(self.main_container)
-        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X)
+        self.toolbar_frame = tk.Frame(self.main_container)
+        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
 
-        self.content_frame = ttk.Frame(self.main_container)
-        self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.content_frame = tk.Frame(self.main_container)
+        self.content_frame.pack(side=tk.TOP, fill=tk.BOTH,
+                                expand=True, padx=5, pady=5)
 
-        self.status_frame = ttk.Frame(self.main_container)
-        self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_frame = tk.Frame(self.main_container)
+        self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
-        self.status_label = ttk.Label(self.status_frame, text="", anchor="w")
-        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.status_label = tk.Label(self.status_frame, text="", anchor="w")
+        self.status_label.pack(side=tk.LEFT, fill=tk.X,
+                               expand=True, padx=5, pady=5)
 
     def create_toolbar(self):
         buttons = {
@@ -138,17 +137,17 @@ class App:
         }
 
         for btn_text, command in buttons.items():
-            btn = ttk.Button(self.toolbar_frame,
-                             text=btn_text, command=command)
-            btn.pack(side=tk.LEFT)
+            btn = tk.Button(self.toolbar_frame, text=btn_text, command=command)
+            btn.pack(side=tk.LEFT, padx=5, pady=5)
 
     def create_left_panel(self):
-        self.left_panel = ttk.Frame(self.content_frame)
-        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.left_panel = tk.Frame(self.content_frame)
+        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH,
+                             expand=True, padx=5, pady=5)
 
         self.map_canvas = tk.Canvas(
-            self.left_panel, highlightthickness=1, bg="#f0f0f0")
-        self.map_canvas.pack(fill=tk.BOTH, expand=True)
+            self.left_panel, highlightthickness=1, bg="#000000")
+        self.map_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         self.map_canvas.bind('<Motion>', self.on_canvas_hover)
         self.map_canvas.bind('<Configure>', self.on_map_canvas_resize)
@@ -160,140 +159,125 @@ class App:
         )
 
     def create_right_panel(self):
-        self.right_panel = ttk.Frame(self.content_frame, width=400)
-        self.right_panel.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=10)
+        self.right_panel = tk.Frame(self.content_frame, width=400)
+        self.right_panel.pack(side=tk.LEFT, fill=tk.Y,
+                              expand=False, padx=5, pady=5)
         self.right_panel.pack_propagate(False)
 
-        input_frame = ttk.LabelFrame(self.right_panel, text="Current Input")
-        input_frame.pack(fill=tk.X)
+        input_frame = tk.LabelFrame(self.right_panel, text="Current Input")
+        input_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.input_canvas = tk.Canvas(
             input_frame, height=25, highlightthickness=0, bg="#f0f0f0")
-        self.input_canvas.pack(fill=tk.X)
+        self.input_canvas.pack(fill=tk.X, padx=5, pady=5)
 
-        memory_frame = ttk.LabelFrame(
+        self.memory_frame = tk.LabelFrame(
             self.right_panel, text="Retrieved Memory")
-        self.memory_frame = memory_frame
-        memory_frame.pack(fill=tk.X)
+        self.memory_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.memory_canvas = tk.Canvas(
-            memory_frame, height=25, highlightthickness=0, bg="#f0f0f0")
-        self.memory_canvas.pack(fill=tk.X)
+            self.memory_frame, height=25, highlightthickness=0, bg="#f0f0f0")
+        self.memory_canvas.pack(fill=tk.X, padx=5, pady=5)
 
-        sim_frame = ttk.LabelFrame(self.right_panel, text="Similarity Metric")
-        sim_frame.pack(fill=tk.X)
+        sim_frame = tk.LabelFrame(self.right_panel, text="Similarity Metric")
+        sim_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.sim_label = ttk.Label(
+        self.sim_label = tk.Label(
             sim_frame, text="Confidence: 0.0%", anchor=tk.CENTER)
-        self.sim_label.pack(fill=tk.X)
+        self.sim_label.pack(fill=tk.X, padx=5, pady=5)
 
-        self.sim_progressbar = ttk.Progressbar(
-            sim_frame, mode='determinate', length=200)
-        self.sim_progressbar.pack(fill=tk.X)
+        self.sim_progressbar = tk.Canvas(sim_frame, height=10, bg="#d9d9d9")
+        self.sim_progressbar.pack(fill=tk.X, padx=5, pady=5)
 
-        settings_frame = ttk.LabelFrame(
+        settings_frame = tk.LabelFrame(
             self.right_panel, text="Camera Settings")
-        settings_frame.pack(fill=tk.X)
+        settings_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        blur_container = ttk.Frame(settings_frame)
-        blur_container.pack(fill=tk.X)
+        blur_container = tk.LabelFrame(settings_frame, text="Blur Radius")
+        blur_container.pack(fill=tk.X, padx=5, pady=5)
 
-        blur_label_frame = ttk.Frame(blur_container)
-        blur_label_frame.pack(fill=tk.X)
+        self.blur_value_label = tk.Label(
+            blur_container, text=f"{self.camera_blur_radius:.1f}")
+        self.blur_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        ttk.Label(blur_label_frame, text="Blur Radius:").pack(side=tk.LEFT)
-        self.blur_value_label = ttk.Label(
-            blur_label_frame, text=f"{self.camera_blur_radius:.1f}")
-        self.blur_value_label.pack(side=tk.LEFT)
-
-        self.blur_slider = ttk.Scale(
+        self.blur_slider = tk.Scale(
             blur_container, from_=0.0, to=5.0, orient=tk.HORIZONTAL,
             command=self.on_blur_change)
         self.blur_slider.set(self.camera_blur_radius)
-        self.blur_slider.pack(fill=tk.X)
+        self.blur_slider.pack(fill=tk.X, padx=5, pady=5)
 
-        fov_container = ttk.Frame(settings_frame)
-        fov_container.pack(fill=tk.X)
+        fov_container = tk.LabelFrame(settings_frame, text="Field of View")
+        fov_container.pack(fill=tk.X, padx=5, pady=5)
 
-        fov_label_frame = ttk.Frame(fov_container)
-        fov_label_frame.pack(fill=tk.X)
+        self.fov_value_label = tk.Label(
+            fov_container, text=f"{self.cone_angle:.0f}°")
+        self.fov_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        ttk.Label(fov_label_frame, text="Field of View:").pack(side=tk.LEFT)
-        self.fov_value_label = ttk.Label(
-            fov_label_frame, text=f"{self.cone_angle:.0f}°")
-        self.fov_value_label.pack(side=tk.LEFT)
-
-        self.fov_slider = ttk.Scale(
+        self.fov_slider = tk.Scale(
             fov_container, from_=30, to=360, orient=tk.HORIZONTAL,
             command=self.on_fov_change)
         self.fov_slider.set(self.cone_angle)
-        self.fov_slider.pack(fill=tk.X)
+        self.fov_slider.pack(fill=tk.X, padx=5, pady=5)
 
-        visibility_container = ttk.Frame(settings_frame)
-        visibility_container.pack(fill=tk.X)
+        visibility_container = tk.LabelFrame(
+            settings_frame, text="Visibility Index")
+        visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
-        visibility_label_frame = ttk.Frame(visibility_container)
-        visibility_label_frame.pack(fill=tk.X)
+        self.visibility_value_label = tk.Label(
+            visibility_container, text=f"{self.visibility_index:.2f}")
+        self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        ttk.Label(
-            visibility_label_frame, text="Visibility Index:").pack(
-            side=tk.LEFT)
-        self.visibility_value_label = ttk.Label(
-            visibility_label_frame, text=f"{self.visibility_index:.2f}")
-        self.visibility_value_label.pack(side=tk.LEFT)
-
-        self.visibility_slider = ttk.Scale(
-            visibility_container, from_=0.01, to=1.0, orient=tk.HORIZONTAL,
-            command=self.on_visibility_change)
+        self.visibility_slider = tk.Scale(
+            visibility_container, from_=0.01, to=1.0, resolution=0.01,
+            orient=tk.HORIZONTAL, command=self.on_visibility_change)
         self.visibility_slider.set(self.visibility_index)
-        self.visibility_slider.pack(fill=tk.X)
+        self.visibility_slider.pack(fill=tk.X, padx=5, pady=5)
 
-        beta_container = ttk.Frame(settings_frame)
-        beta_container.pack(fill=tk.X)
+        beta_container = tk.LabelFrame(
+            settings_frame, text="Beta (Inverse Temp)")
+        beta_container.pack(fill=tk.X, padx=5, pady=5)
 
-        beta_label_frame = ttk.Frame(beta_container)
-        beta_label_frame.pack(fill=tk.X)
+        self.beta_value_label = tk.Label(
+            beta_container, text=f"{self.beta:.1f}")
+        self.beta_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-        ttk.Label(
-            beta_label_frame, text="Beta (Inverse Temp):").pack(
-            side=tk.LEFT)
-        self.beta_value_label = ttk.Label(
-            beta_label_frame, text=f"{self.beta:.1f}")
-        self.beta_value_label.pack(side=tk.LEFT)
-
-        self.beta_slider = ttk.Scale(
+        self.beta_slider = tk.Scale(
             beta_container, from_=1.0, to=200.0, orient=tk.HORIZONTAL,
             command=self.on_beta_change)
         self.beta_slider.set(self.beta)
-        self.beta_slider.pack(fill=tk.X)
+        self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
 
-        self.interleaved_rgb_checkbox = ttk.Checkbutton(
+        self.interleaved_rgb_checkbox = tk.Checkbutton(
             settings_frame, text="Interleaved RGB encoding",
             variable=self.interleaved_rgb,
-            command=self.on_interleaved_rgb_toggle)
-        self.interleaved_rgb_checkbox.pack(fill=tk.X)
+            command=self.on_interleaved_rgb_toggle
+        )
+        self.interleaved_rgb_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
-        stats_frame = ttk.LabelFrame(
+        stats_frame = tk.LabelFrame(
             self.right_panel, text="Accuracy Statistics")
-        stats_frame.pack(fill=tk.X)
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.stats_label = ttk.Label(
+        self.stats_label = tk.Label(
             stats_frame, text="Train the network to see accuracy statistics",
             font=("Arial", 9),
-            justify=tk.LEFT)
-        self.stats_label.pack(fill=tk.X)
+            justify=tk.LEFT
+        )
+        self.stats_label.pack(fill=tk.X, padx=5, pady=5)
 
-        self.show_test_positions_checkbox = ttk.Checkbutton(
+        self.show_test_positions_checkbox = tk.Checkbutton(
             stats_frame, text="Show test positions",
             variable=self.show_test_positions,
-            command=self.on_show_test_positions_toggle)
-        self.show_test_positions_checkbox.pack(fill=tk.X)
+            command=self.on_show_test_positions_toggle
+        )
+        self.show_test_positions_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
-        self.show_confidence_heatmap_checkbox = ttk.Checkbutton(
+        self.show_confidence_heatmap_checkbox = tk.Checkbutton(
             stats_frame, text="Show confidence heatmap",
             variable=self.show_confidence_heatmap,
-            command=self.on_show_confidence_heatmap_toggle)
-        self.show_confidence_heatmap_checkbox.pack(fill=tk.X)
+            command=self.on_show_confidence_heatmap_toggle
+        )
+        self.show_confidence_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
     def on_show_test_positions_toggle(self):
         """Handle checkbox toggle for showing test positions"""
