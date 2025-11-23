@@ -118,18 +118,19 @@ class App:
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
         self.toolbar_frame = ttk.Frame(self.main_container)
-        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+        self.toolbar_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=2)
 
         self.content_frame = ttk.Frame(self.main_container)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH,
-                                expand=True, padx=5, pady=5)
+                                expand=True, padx=5)
 
         self.status_frame = ttk.Frame(self.main_container)
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
-        self.status_label = ttk.Label(self.status_frame, text="", anchor="w")
+        self.status_label = ttk.Label(
+            self.status_frame, text="Press Sample & Train!", anchor="w")
         self.status_label.pack(side=tk.LEFT, fill=tk.X,
-                               expand=True, padx=5, pady=5)
+                               expand=True, padx=5, pady=2)
 
     def create_toolbar(self):
         buttons = {
@@ -142,12 +143,12 @@ class App:
         for btn_text, command in buttons.items():
             btn = ttk.Button(self.toolbar_frame,
                              text=btn_text, command=command)
-            btn.pack(side=tk.LEFT, padx=5, pady=5)
+            btn.pack(side=tk.LEFT, padx=5)
 
     def create_left_panel(self):
         self.left_panel = ttk.Frame(self.content_frame)
         self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH,
-                             expand=True, padx=5, pady=5)
+                             expand=True, padx=5)
 
         self.map_canvas = tk.Canvas(
             self.left_panel, highlightthickness=1, bg="#000000")
@@ -166,7 +167,7 @@ class App:
         # Create a frame for the right panel with a scrollbar
         right_panel_container = ttk.Frame(self.content_frame, width=400)
         right_panel_container.pack(
-            side=tk.LEFT, fill=tk.Y, expand=False, padx=(5, 10), pady=5)
+            side=tk.LEFT, fill=tk.Y, expand=False, padx=(5, 10))
         right_panel_container.pack_propagate(False)
 
         # Add a canvas and scrollbar for scrolling
@@ -223,7 +224,7 @@ class App:
         self.sim_progressbar.pack(fill=tk.X, padx=5, pady=5)
 
         settings_frame = tk.LabelFrame(
-            self.right_panel, text="Camera Settings"
+            self.right_panel, text="Settings"
         )
         settings_frame.pack(fill=tk.X, padx=5, pady=5)
 

@@ -1,4 +1,3 @@
 -   noise/random objects
--   localization confidence heatmap
 -   visualize how far the cat sees
 -   stepping through
