@@ -25,6 +25,9 @@ class App:
 
         self.current_map_image = Image.new(
             "RGB", (MAP_WIDTH, MAP_HEIGHT), "white")
+        # Cached map with noise applied - used for raytracing when noise is enabled
+        # This keeps the base map clean while allowing noise to affect robot's perception
+        self.map_with_noise = None
         self.tk_map_image = None
 
         self.robot_x = MAP_WIDTH // 2
@@ -42,6 +45,11 @@ class App:
         self.beta = DEFAULT_BETA  # Inverse temperature parameter
 
         self.interleaved_rgb = tk.BooleanVar(value=INTERLEAVED_RGB)
+
+        self.noise_amount = DEFAULT_NOISE_AMOUNT  # Number of random objects
+        self.apply_noise = tk.BooleanVar(value=False)  # Whether to apply noise
+        # List of (x, y, radius) tuples for noise circles
+        self.noise_circles = []
 
         self.camera_samples = 100  # Number of pixel samples in the 1D strip
         self.current_camera_view = None  # Store current camera strip
@@ -293,6 +301,30 @@ class App:
         self.beta_slider.set(self.beta)
         self.beta_slider.pack(fill=tk.X, padx=5, pady=5)
 
+        noise_container = tk.LabelFrame(
+            settings_frame, text="Noise Settings"
+        )
+        noise_container.pack(fill=tk.X, padx=5, pady=5)
+
+        self.noise_value_label = ttk.Label(
+            noise_container, text=f"{int(self.noise_amount)} objects", anchor="w"
+        )
+        self.noise_value_label.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.noise_slider = ttk.Scale(
+            noise_container, from_=0, to=100, orient=tk.HORIZONTAL,
+            command=self.on_noise_change
+        )
+        self.noise_slider.set(self.noise_amount)
+        self.noise_slider.pack(fill=tk.X, padx=5, pady=5)
+
+        self.apply_noise_checkbox = ttk.Checkbutton(
+            noise_container, text="Apply noise to map",
+            variable=self.apply_noise,
+            command=self.on_apply_noise_toggle
+        )
+        self.apply_noise_checkbox.pack(fill=tk.X, padx=5, pady=5)
+
         # Interleaved RGB checkbox (left-aligned)
         self.interleaved_rgb_checkbox = ttk.Checkbutton(
             settings_frame, text="Interleaved RGB encoding",
@@ -385,6 +417,50 @@ class App:
         if self.is_trained:
             self.status_label['text'] = "⚠️ Retraining required: Changing RGB encoding requires retraining. Click 'Sample & Train' again."
 
+    def on_noise_change(self, value):
+        """Handle noise amount slider change"""
+        self.noise_amount = int(float(value))
+        self.noise_value_label.config(text=f"{self.noise_amount} objects")
+        if self.apply_noise.get():
+            self.generate_noise_circles()
+            self.update_map_display()
+
+    def on_apply_noise_toggle(self):
+        """Handle apply noise checkbox toggle"""
+        if self.apply_noise.get():
+            self.generate_noise_circles()
+        else:
+            self.map_with_noise = None
+        self.update_map_display()
+
+    def generate_noise_circles(self):
+        """Generate random circles for noise based on noise_amount and create cached map"""
+        import random
+
+        self.noise_circles = []
+
+        for _ in range(self.noise_amount):
+            x = random.randint(0, MAP_WIDTH)
+            y = random.randint(0, MAP_HEIGHT)
+            radius = random.randint(3, 15)
+            self.noise_circles.append((x, y, radius))
+
+        self.update_map_with_noise()
+
+    def update_map_with_noise(self):
+        """Create a cached map with noise applied for raytracing"""
+        if self.apply_noise.get() and len(self.noise_circles) > 0:
+            self.map_with_noise = self.current_map_image.copy()
+            self.draw_noise_circles_on_image(self.map_with_noise)
+        else:
+            self.map_with_noise = None
+
+    def get_map_for_raytracing(self):
+        """Get the appropriate map for raytracing (with or without noise)"""
+        if self.map_with_noise is not None:
+            return self.map_with_noise
+        return self.current_map_image
+
     def compute_confidence_heatmap(self):
         """
         Pre-compute confidence values at a dense grid of positions for each direction.
@@ -462,6 +538,8 @@ class App:
 
     def on_map_saved(self, new_map_image):
         self.current_map_image = new_map_image
+        if self.apply_noise.get():
+            self.update_map_with_noise()
         self.update_map_display()
 
     def load_robot_image(self):
@@ -529,6 +607,8 @@ class App:
                     imported_image = imported_image.convert("RGB")
 
                 self.current_map_image = imported_image
+                if self.apply_noise.get():
+                    self.update_map_with_noise()
                 self.update_map_display()
 
                 self.config.set_last_map_path(file_path)
@@ -993,6 +1073,9 @@ class App:
     def update_map_display(self):
         display_image = self.current_map_image.copy()
 
+        if self.apply_noise.get():
+            self.draw_noise_circles_on_image(display_image)
+
         self.draw_viewing_cone_on_image(display_image)
 
         if self.show_confidence_heatmap.get() and self.sample_similarities is not None:
@@ -1150,6 +1233,17 @@ class App:
 
         return closest
 
+    def draw_noise_circles_on_image(self, image):
+        """Draw random noise circles on the image"""
+        draw = ImageDraw.Draw(image)
+
+        for x, y, radius in self.noise_circles:
+            draw.ellipse(
+                [x - radius, y - radius, x + radius, y + radius],
+                fill='black',
+                outline='black'
+            )
+
     def draw_viewing_cone_on_image(self, image):
         """Draw the viewing cone with 50% transparency directly on a PIL image"""
         half_cone = self.cone_angle / 2
@@ -1209,7 +1303,7 @@ class App:
 
         step_size = 5.0
 
-        pixels = self.current_map_image.load()
+        pixels = self.get_map_for_raytracing().load()
 
         distance = 0
         while distance < max_distance:
@@ -1238,7 +1332,7 @@ class App:
         Walls appear less opaque (more white) the further they are from the robot.
         """
         half_cone = self.cone_angle / 2
-        pixels = self.current_map_image.load()
+        pixels = self.get_map_for_raytracing().load()
 
         camera_strip = []
 

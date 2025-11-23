@@ -39,13 +39,17 @@ CAMERA_FOV = 120  # Default cone angle
 # Embedding encoding method
 # True: Interleaved RGB per pixel [R0, G0, B0, R1, G1, B1, ...]
 # False: Channel-separated [R0, R1, ..., G0, G1, ..., B0, B1, ...]
-INTERLEAVED_RGB = True
+INTERLEAVED_RGB = False
 
 # Modern Hopfield Network parameters
 # Beta (inverse temperature) controls sharpness of retrieval
 # Higher beta = sharper, more confident retrievals
 # Lower beta = softer, more distributed retrievals
 DEFAULT_BETA = 50.0
+
+# Noise settings
+# Number of random objects to place on the map
+DEFAULT_NOISE_AMOUNT = 10
 
 # Heatmap rendering parameters
 # Resolution scale for heatmap computation (0.25 = 1/4 resolution)
