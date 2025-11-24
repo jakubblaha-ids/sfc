@@ -1,8 +1,8 @@
 Crucial:
--   which angle is shown when hovering?
 -   how does angle averaging work?
 -   visualize energy function
 -   why normalization
+-   average confidence into docs
 
 Nice to have:
 -   add how this maps to real world case into docs
@@ -18,3 +18,4 @@ Nice to have:
 Done:
 -   number of angles
 -   pattern dimension
+-   which angle is shown when hovering?

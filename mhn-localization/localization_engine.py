@@ -183,6 +183,32 @@ class LocalizationEngine:
             'view': self.sample_views[sample_idx]
         }
 
+    def get_samples_at_position(self, x, y, tolerance=1.0):
+        """
+        Get all samples at a given position (with different angles).
+
+        Args:
+            x: X position
+            y: Y position
+            tolerance: Distance tolerance for position matching
+
+        Returns:
+            List of dictionaries with 'idx', 'angle', 'view' sorted by angle
+        """
+        samples_at_pos = []
+
+        for idx, (sample_x, sample_y, angle) in enumerate(self.sample_positions):
+            distance = ((sample_x - x) ** 2 + (sample_y - y) ** 2) ** 0.5
+            if distance <= tolerance:
+                samples_at_pos.append({
+                    'idx': idx,
+                    'angle': angle,
+                    'view': self.sample_views[idx]
+                })
+
+        samples_at_pos.sort(key=lambda s: s['angle'])
+        return samples_at_pos
+
     def get_num_samples(self):
         """Get the number of stored samples."""
         return len(self.sample_positions)

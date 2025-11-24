@@ -85,6 +85,7 @@ class App:
         self.top_k = self._top_k
 
         self.hovered_sample_idx = None
+        self._hovered_strip_images = []
 
         self.keys_pressed = set()
         self.update_interval = 16
@@ -994,11 +995,17 @@ class App:
         if closest_idx != self.hovered_sample_idx:
             self.hovered_sample_idx = closest_idx
 
+            # Clear stored hover images
+            if hasattr(self, '_hovered_strip_images'):
+                self._hovered_strip_images = []
+
             if closest_idx is not None:
                 self.display_saved_sample(closest_idx)
+                self.update_map_display()
             else:
                 self.memory_canvas.delete("all")
                 self.memory_frame.config(text="Retrieved Memory")
+                self.update_map_display()
 
     def _display_scaled_map_image(self, display_image):
         """Scale and display the map image to fit canvas width while maintaining aspect ratio"""
@@ -1060,6 +1067,86 @@ class App:
         self.draw_top_k_interpolation_lines()
 
         self.draw_robot()
+
+        self.draw_hovered_sample_visualization()
+
+    def draw_hovered_sample_visualization(self):
+        """Draw visualization of all directions for the hovered sample position"""
+        if self.hovered_sample_idx is None:
+            return
+
+        sample_info = self.localization.get_sample_info(self.hovered_sample_idx)
+        if not sample_info:
+            return
+
+        x, y = sample_info['x'], sample_info['y']
+
+        # Highlight the hovered position on the map
+        canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
+        highlight_radius = 10 * self.map_scale_factor
+
+        self.map_canvas.create_oval(
+            canvas_x - highlight_radius,
+            canvas_y - highlight_radius,
+            canvas_x + highlight_radius,
+            canvas_y + highlight_radius,
+            outline="#FFFF00",
+            width=max(2, int(2 * self.map_scale_factor)),
+            tags="hovered_highlight"
+        )
+
+        # Get all samples at this position
+        samples_at_pos = self.localization.get_samples_at_position(x, y)
+
+        if not samples_at_pos:
+            return
+
+        # Draw all direction samples in top-left corner
+        strip_height = 15
+        margin = 10
+        start_x = margin
+        start_y = margin
+
+        for i, sample in enumerate(samples_at_pos):
+            view = sample['view']
+            angle = sample['angle']
+
+            # Get the width from the camera view
+            view_width = view.size[0]
+
+            # Resize to bigger height
+            resized_view = view.resize(
+                (view_width, strip_height),
+                Image.Resampling.NEAREST
+            )
+
+            # Convert to PhotoImage
+            tk_view = ImageTk.PhotoImage(resized_view)
+
+            # Draw on canvas
+            y_pos = start_y + i * (strip_height + 2)
+            self.map_canvas.create_image(
+                start_x, y_pos,
+                image=tk_view,
+                anchor="nw",
+                tags="hovered_direction_strip"
+            )
+
+            # Store reference to prevent garbage collection
+            if not hasattr(self, '_hovered_strip_images'):
+                self._hovered_strip_images = []
+            self._hovered_strip_images.append(tk_view)
+
+            # Draw angle label next to the strip
+            label_x = start_x + view_width + 5
+            self.map_canvas.create_text(
+                label_x, y_pos + strip_height // 2,
+                text=f"{angle:.0f}°",
+                fill="#FF0000",
+                anchor="w",
+                font=("Arial", 10),
+                tags="hovered_direction_label"
+            )
 
     def draw_robot(self):
         canvas_robot_x, canvas_robot_y = self.image_to_canvas_coords(
