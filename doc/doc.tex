@@ -107,9 +107,8 @@ broader consideration of similar patterns.
 
 \subsection{Observation capturing}
 
-Visual observations are captured using a raycasting camera simulator
-implemented in \texttt{CameraSimulator}. The robot's field of view is
-represented as a cone defined by an angle (30-360°).
+Visual observations are captured using a raycasting camera simulator. The
+robot's field of view is represented as a cone defined by an angle (30-360°).
 
 For each of the $N$ angular samples within the viewing cone (where $N$ is
 configurable), a ray is cast from the robot's position outward until hitting a
@@ -169,20 +168,31 @@ allows the network to combine information from multiple similar observations,
 possibly providing more accurate localization when multiple positions have
 similar visual features.
 
+\subsection{Visualization}
+
+During inference, the visualization displays several elements to illustrate the
+localization process: the robot is drawn with a directional indicator showing
+its current position and heading angle; a shaded cone extending from the robot
+shows the camera's viewing area; the weighted average position (or the best
+match position when $k = 1$) computed from the top-k matches is marked in green
+color; and the positions of the top-k retrieved patterns from memory are
+connected with a black line to the green dot to show which stored observations
+contributed to the final position estimate. All markers of stored observations
+are sized by the attention weights, which themselves are determined by the beta
+parameter.
+
 \subsection{Configurable options}
 
 The following options are configurable using the UI:
 
-\begin{itemize}
-    \item \textbf{Beta ($\beta$)}: Inverse temperature (1.0–200.0, default 50.0). Controls sharpness of pattern retrieval. Higher values make the network focus on the best matches; lower values broaden the retrieval.
-    \item \textbf{Sample Stride}: Grid spacing for sample positions (default 50 pixels). Smaller values increase memory size but improve coverage density of the map.
-    \item \textbf{Sample Rotations}: Number of orientations per position (default 16, equivalent to 22.5° steps). More rotations improve orientation accuracy during localization.
-    \item \textbf{Camera Samples}: Number of rays in observation strip (fixed at 100). Determines the dimensionality of captured observations.
-    \item \textbf{Blur Radius}: Gaussian blur applied to observations (0–5.0, default 4.0). Reduces noise sensitivity and improves localization robustness.
-    \item \textbf{Field of View}: Camera viewing angle (30–360°, default 120°). Wider FOV captures more context.
-    \item \textbf{Visibility Index}: Distance opacity factor (0.01–1.0, default 0.1). Lower values make distant objects fade more quickly, simulating limited visibility.
-    \item \textbf{Top-k}: Number of matches to combine (1–20, default 1). Values greater than 1 smooth predictions by averaging multiple similar observations.
-\end{itemize}
+\textbf{Beta ($\beta$)}: Inverse temperature (1.0–200.0). Higher values make the network focus on the best matches; lower values broaden the retrieval.
+\textbf{Sample Stride}: Grid spacing for sample positions.
+\textbf{Sample Rotations}: Number of orientations per position.
+\textbf{Camera Samples}: Number of rays in observation strip. Determines the dimensionality of captured observations.
+\textbf{Blur Radius}: Gaussian blur applied to observations.
+\textbf{FOV}: Camera viewing angle.
+\textbf{Visibility Index}: Distance opacity factor. Lower values make distant objects fade more quickly, simulating limited visibility.
+\textbf{Top-k}: Number of matches to combine. Values greater than 1 smooth predictions by averaging multiple similar observations.
 
 Configuration parameters are stored in JSON format in
 \texttt{./tmp/sfc\_config.json}, allowing users to save and restore their
@@ -191,9 +201,18 @@ map on startup for convenience. Map images are stored and loaded as PNG files.
 
 \subsection{Extra features}
 
-\subsubsection*{Confidence heatmap}
+\paragraph{Confidence heatmap} visualizes localization reliability across the entire map by computing
+prediction confidence at grid positions. For every cell in grid finer than the
+capture grid overlaying the map, the application captures an observation at
+that position, queries the MDN, and records the attention weight assigned to
+the best matching pattern. These attention weights, naturally represent the
+network's confidence in its prediction—higher weights indicate stronger, more
+distinctive matches while lower weights suggest ambiguous observations. The
+resulting confidence values are interpolated and displayed as a color-coded
+overlay, with warmer colors indicating high-confidence regions, and cooler
+colors showing areas where localization is uncertain.
 
-\subsubsection*{Map editor}
+\paragraph{Map editor} allows the user to draw a map of their liking and use it inside the demo.
 
 \section{User Manual}
 \subsection{Requirements}
