@@ -1,5 +1,5 @@
-from constants import SAMPLE_STRIDE, HEATMAP_RESOLUTION_SCALE
-from heatmap_builder import HeatmapBuilder
+from .constants import SAMPLE_STRIDE, HEATMAP_RESOLUTION_SCALE
+from .heatmap_builder import HeatmapBuilder
 
 
 class ConfidenceAnalyzer:

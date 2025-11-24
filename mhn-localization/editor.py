@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, colorchooser
-from constants import *
+from .constants import *
 from PIL import Image, ImageDraw, ImageTk
 
 

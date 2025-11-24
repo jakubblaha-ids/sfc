@@ -1,4 +1,4 @@
-from constants import MAP_WIDTH, MAP_HEIGHT, SAMPLE_STRIDE, SAMPLE_ROTATIONS
+from .constants import MAP_WIDTH, MAP_HEIGHT, SAMPLE_STRIDE, SAMPLE_ROTATIONS
 
 
 class SamplingEngine:

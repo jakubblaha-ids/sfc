@@ -9,6 +9,13 @@ Other tweakable settings:
 -   normalization method
 -   observation window size (number of observations in horizontally and vertically)
 -   energy function variant
+-   change hopfield.py to mhn.py
+-   reame camera_simpulator to camera.py
+-   rename localization_engine to localization.py
+-   add how this maps to real world case into docs
+-   how does angle averaging work?
+-   z-index of heatmap positions?
+-   which angle is shown when hovering?
 
 Then also fix the settable parameters in the documentation.
 

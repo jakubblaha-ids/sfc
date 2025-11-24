@@ -22,7 +22,7 @@ class ModernHopfieldNetwork:
         self.memory_normalized = None  # Normalized patterns for cosine similarity
         self.num_patterns = 0
 
-    def train(self, patterns, progress_callback=None):
+    def train(self, patterns):
         """
         Train the network by storing patterns in memory.
         For Modern Hopfield Networks, training is simply storing the patterns.
@@ -30,7 +30,6 @@ class ModernHopfieldNetwork:
 
         Args:
             patterns: list or numpy array of shape (N_patterns, embedding_dim)
-            progress_callback: Optional callback function(current, total) for progress updates
 
         Returns:
             None
@@ -49,14 +48,6 @@ class ModernHopfieldNetwork:
         # Avoid division by zero
         norms = np.where(norms == 0, 1, norms)
         self.memory_normalized = self.memory / norms
-
-        # Report progress during normalization
-        if progress_callback:
-            batch_size = max(10, self.num_patterns // 100)
-            for i in range(0, self.num_patterns, batch_size):
-                end_idx = min(i + batch_size, self.num_patterns)
-                if progress_callback:
-                    progress_callback(end_idx, self.num_patterns)
 
         print(
             f"Training complete: {self.num_patterns} patterns stored and normalized")

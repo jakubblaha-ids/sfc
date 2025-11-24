@@ -1,4 +1,4 @@
-from constants import MAP_WIDTH, MAP_HEIGHT
+from .constants import MAP_WIDTH, MAP_HEIGHT
 
 
 class RobotState:

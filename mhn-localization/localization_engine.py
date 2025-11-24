@@ -1,6 +1,6 @@
 import numpy as np
-from hopfield import ModernHopfieldNetwork
-from constants import INTERLEAVED_RGB
+from .hopfield import ModernHopfieldNetwork
+from .constants import INTERLEAVED_RGB
 
 
 class LocalizationEngine:

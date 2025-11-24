@@ -185,7 +185,7 @@ parameter.
 
 The following options are configurable using the UI:
 
-\textbf{Beta ($\beta$)}: Inverse temperature (1.0–200.0). Higher values make the network focus on the best matches; lower values broaden the retrieval.
+\textbf{Beta ($\beta$)}: Inverse temperature. Higher values make the network focus on the best matches; lower values broaden the retrieval.
 \textbf{Sample Stride}: Grid spacing for sample positions.
 \textbf{Sample Rotations}: Number of orientations per position.
 \textbf{Camera Samples}: Number of rays in observation strip. Determines the dimensionality of captured observations.
@@ -214,34 +214,20 @@ colors showing areas where localization is uncertain.
 
 \paragraph{Map editor} allows the user to draw a map of their liking and use it inside the demo.
 
-\section{User Manual}
-\subsection{Requirements}
-% Python version, required libraries, system requirements
+\section{Running the Program}
 
-\subsection{Compilation and Installation}
-% How to install dependencies
-% Any setup steps needed
+To run the program, create a virtual environment, install dependencies and
+execute as a Python module:
+\begin{verbatim}
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python -m mhn-localization
+\end{verbatim}
 
-\subsection{Running the Program}
-% Command-line interface
-% Configuration file format
-% Interactive mode usage
-
-\subsection{Program Control}
-% Available commands during execution
-% How to perform step-by-step execution
-% How to interrupt/terminate
-% Output interpretation
-
-\section{Results and Discussion}
-% Example runs with screenshots/figures
-% Accuracy analysis
-% Performance characteristics
-% Limitations and possible improvements
-
-\section{Conclusion}
-% Summary of achievements
-% Lessons learned
+The program does not require any arguments, everything can be set intuitively
+using the GUI. The robot movement can be controlled using the keys
+\texttt{WASD}. Rotation can be controlled using keys \texttt{J} and \texttt{L}.
 
 % \bibliographystyle{plain}
 % \bibliography{references}
