@@ -25,6 +25,7 @@ PANEL_PADDING = 10
 SAMPLE_STRIDE = 50  # Pixels between sample positions
 # Number of rotations at each position (45-degree increments)
 SAMPLE_ROTATIONS = 16
+DEFAULT_NUM_ANGLES = 16  # Default number of angles (4, 8, 16, or 32)
 SAMPLE_DOT_RADIUS = 3  # Size of the sample position dots
 # Update display every N samples during auto-sampling (set to None to disable updates)
 SAMPLE_UPDATE_FREQUENCY = 100

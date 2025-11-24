@@ -158,7 +158,10 @@ Hopfield Networks require no iterative optimization.
 
 During inference, a query observation is converted to an embedding vector and
 passed to the MHN. The network retrieves the top-k closest matching patterns
-using attention weights computed from the energy function.
+using attention weights obtained from a softmax over cosine similarity scores.
+Retrieval is instantaneous, performed in a single forward pass through the
+network by computing cosine similarities with all stored patterns and applying
+softmax to obtain attention weights.
 
 For $k=1$, the robot's position is determined directly from the best matching
 stored observation. For $k>1$, a weighted average position is computed using
@@ -186,13 +189,11 @@ parameter.
 The following options are configurable using the UI:
 
 \textbf{Beta ($\beta$)}: Inverse temperature. Higher values make the network focus on the best matches; lower values broaden the retrieval.
-\textbf{Sample Stride}: Grid spacing for sample positions.
-\textbf{Sample Rotations}: Number of orientations per position.
-\textbf{Camera Samples}: Number of rays in observation strip. Determines the dimensionality of captured observations.
 \textbf{Blur Radius}: Gaussian blur applied to observations.
 \textbf{FOV}: Camera viewing angle.
 \textbf{Visibility Index}: Distance opacity factor. Lower values make distant objects fade more quickly, simulating limited visibility.
 \textbf{Top-k}: Number of matches to combine. Values greater than 1 smooth predictions by averaging multiple similar observations.
+\textbf{Number of Angles per Location}: Number of orientations captured at each grid position. Can be set to 4, 8, 16, or 32. Higher values provide more angular coverage but increase memory requirements and sampling time.
 
 Configuration parameters are stored in JSON format in
 \texttt{./tmp/sfc\_config.json}, allowing users to save and restore their

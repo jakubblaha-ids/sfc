@@ -42,7 +42,8 @@ class ConfigManager:
             "top_k": None,
             "noise_amount": None,
             "apply_noise": None,
-            "interleaved_rgb": None
+            "interleaved_rgb": None,
+            "num_angles": None
         }
 
     def save_config(self):

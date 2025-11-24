@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, ttk
 from .constants import *
+from .constants import DEFAULT_NUM_ANGLES
 from PIL import Image, ImageTk, ImageDraw
 from .editor import MapEditor
 from .config import ConfigManager
@@ -30,6 +31,7 @@ class App:
         self._noise_amount = self.config.get("noise_amount", DEFAULT_NOISE_AMOUNT)
         self._apply_noise = self.config.get("apply_noise", False)
         self._interleaved_rgb = self.config.get("interleaved_rgb", INTERLEAVED_RGB)
+        self._num_angles = self.config.get("num_angles", DEFAULT_NUM_ANGLES)
 
         # Logic components (separated from UI)
         self.robot = RobotState()
@@ -44,7 +46,7 @@ class App:
             beta=self._beta,
             interleaved_rgb=self._interleaved_rgb
         )
-        self.sampling = SamplingEngine()
+        self.sampling = SamplingEngine(num_rotations=self._num_angles)
         self.confidence = ConfidenceAnalyzer(MAP_WIDTH, MAP_HEIGHT)
 
         # UI-related state
@@ -314,6 +316,26 @@ class App:
         self.top_k_slider.set(self._top_k)
         self.top_k_slider.pack(fill=tk.X, padx=5, pady=5)
 
+        num_angles_container = tk.LabelFrame(
+            settings_frame, text="Number of Angles per Location"
+        )
+        num_angles_container.pack(fill=tk.X, padx=5, pady=5)
+
+        self.num_angles_value_label = ttk.Label(
+            num_angles_container, text=f"{self._num_angles}", anchor="w"
+        )
+        self.num_angles_value_label.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.num_angles_slider = ttk.Scale(
+            num_angles_container, from_=0, to=3, orient=tk.HORIZONTAL,
+            command=self.on_num_angles_change
+        )
+        # Map slider position (0-3) to actual values (4, 8, 16, 32)
+        valid_angles = [4, 8, 16, 32]
+        slider_position = valid_angles.index(self._num_angles) if self._num_angles in valid_angles else 2
+        self.num_angles_slider.set(slider_position)
+        self.num_angles_slider.pack(fill=tk.X, padx=5, pady=5)
+
         noise_container = tk.LabelFrame(
             settings_frame, text="Noise Settings"
         )
@@ -461,6 +483,24 @@ class App:
         if self.localization.is_trained:
             self.localize()
             self.update_map_display()
+
+    def on_num_angles_change(self, value):
+        """Handle number of angles slider change"""
+        valid_angles = [4, 8, 16, 32]
+        slider_position = int(round(float(value)))
+        slider_position = max(0, min(3, slider_position))
+
+        num_angles = valid_angles[slider_position]
+
+        self._num_angles = num_angles
+        self.num_angles_value_label.config(text=f"{self._num_angles}")
+        self.config.set("num_angles", self._num_angles)
+
+        # Update the sampling engine with new number of angles
+        self.sampling = SamplingEngine(num_rotations=self._num_angles)
+
+        if self.localization.is_trained:
+            self.status_label['text'] = "⚠️ Retraining required: Changing the number of angles requires retraining. Click 'Sample & Train' again."
 
     def on_interleaved_rgb_toggle(self):
         """Handle interleaved RGB checkbox toggle"""
