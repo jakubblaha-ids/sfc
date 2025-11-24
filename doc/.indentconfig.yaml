@@ -1,0 +1,5 @@
+modifyLineBreaks:
+    textWrapOptions:
+        columns: 80 # target line length
+        when: after # apply after other formatting steps
+        multipleSpacesToSingle: 1 # optional
