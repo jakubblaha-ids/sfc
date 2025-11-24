@@ -211,7 +211,10 @@ network's confidence in its prediction—higher weights indicate stronger, more
 distinctive matches while lower weights suggest ambiguous observations. The
 resulting confidence values are interpolated and displayed as a color-coded
 overlay, with warmer colors indicating high-confidence regions, and cooler
-colors showing areas where localization is uncertain.
+colors showing areas where localization is uncertain. The heatmap can be
+computed and displayed for each angle separately (changing dynamically as the
+robot rotates), or averaged across all angles to show overall confidence
+independent of orientation.
 
 \paragraph{Map editor} allows the user to draw a map of their liking and use it inside the demo.
 
