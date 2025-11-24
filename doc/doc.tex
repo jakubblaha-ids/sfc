@@ -47,11 +47,15 @@ patterns. Classical Hopfield networks had limited storage capacity
 (approximately 0.14N patterns for N neurons) and often retrieved incorrect
 patterns called spurious attractors.
 
-Modern Hopfield Networks significantly improve upon the classical version by
-using a different energy function that allows storing exponentially more
-patterns while providing better retrieval accuracy. The network works by
-storing patterns in memory during a learning phase, then retrieving the most
-similar patterns when presented with a new query.
+Modern Hopfield Networks\footnote{Ramsauer, H., Schäfl, B., Lehner, J., et al.
+(2020). Hopfield Networks is All You Need. arXiv:2008.02217.
+\url{https://arxiv.org/abs/2008.02217}}\footnote{Modern Hopfield Network.
+Wikipedia. \url{https://en.wikipedia.org/wiki/Modern_Hopfield_network}}
+significantly improve upon the classical version by using a different energy
+function that allows storing exponentially more patterns while providing better
+retrieval accuracy. The network works by storing patterns in memory during a
+learning phase, then retrieving the most similar patterns when presented with a
+new query.
 
 A key parameter is the temperature ($\beta$), which controls how selective the
 retrieval is. Higher values make the network focus on fewer best matches, while
