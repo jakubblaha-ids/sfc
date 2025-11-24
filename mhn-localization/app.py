@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, ttk
 from .constants import *
-from .constants import DEFAULT_NUM_ANGLES
+from .constants import DEFAULT_NUM_ANGLES, CAMERA_NUM_RAYS
 from PIL import Image, ImageTk, ImageDraw
 from .editor import MapEditor
 from .config import ConfigManager
@@ -32,13 +32,14 @@ class App:
         self._apply_noise = self.config.get("apply_noise", False)
         self._interleaved_rgb = self.config.get("interleaved_rgb", INTERLEAVED_RGB)
         self._num_angles = self.config.get("num_angles", DEFAULT_NUM_ANGLES)
+        self._num_rays = self.config.get("num_rays", CAMERA_NUM_RAYS)
 
         # Logic components (separated from UI)
         self.robot = RobotState()
         self.camera = CameraSimulator(
             cone_angle=self._fov,
             cone_length=40,
-            camera_samples=100,
+            camera_samples=self._num_rays,
             blur_radius=self._blur_radius,
             visibility_index=self._visibility_index
         )
@@ -265,6 +266,21 @@ class App:
         self.fov_slider.set(self._fov)
         self.fov_slider.pack(fill=tk.X, padx=5, pady=5)
 
+        num_rays_container = tk.LabelFrame(settings_frame, text="Number of Camera Rays")
+        num_rays_container.pack(fill=tk.X, padx=5, pady=5)
+
+        self.num_rays_value_label = ttk.Label(
+            num_rays_container, text=f"{self._num_rays} rays (embedding dim: {self._num_rays * 3})", anchor="w"
+        )
+        self.num_rays_value_label.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.num_rays_slider = ttk.Scale(
+            num_rays_container, from_=10, to=300, orient=tk.HORIZONTAL,
+            command=self.on_num_rays_change
+        )
+        self.num_rays_slider.set(self._num_rays)
+        self.num_rays_slider.pack(fill=tk.X, padx=5, pady=5)
+
         visibility_container = tk.LabelFrame(
             settings_frame, text="Visibility Index"
         )
@@ -457,6 +473,21 @@ class App:
         self.fov_value_label.config(text=f"{self.camera.cone_angle:.0f}°")
         self.config.set("fov", self.camera.cone_angle)
         self.update_map_display()
+
+    def on_num_rays_change(self, value):
+        """Handle number of rays slider change"""
+        num_rays = int(float(value))
+        self._num_rays = num_rays
+        embedding_dim = num_rays * 3
+        self.num_rays_value_label.config(text=f"{num_rays} rays (embedding dim: {embedding_dim})")
+        self.config.set("num_rays", num_rays)
+
+        self.camera.camera_samples = num_rays
+
+        if self.localization.is_trained:
+            self.status_label['text'] = "⚠️ Retraining required: Changing the number of rays requires retraining. Click 'Sample & Train' again."
+        else:
+            self.update_map_display()
 
     def on_visibility_change(self, value):
         """Handle visibility index slider change"""

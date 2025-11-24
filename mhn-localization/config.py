@@ -43,7 +43,8 @@ class ConfigManager:
             "noise_amount": None,
             "apply_noise": None,
             "interleaved_rgb": None,
-            "num_angles": None
+            "num_angles": None,
+            "num_rays": None
         }
 
     def save_config(self):

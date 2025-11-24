@@ -37,6 +37,10 @@ CAMERA_BLUR_RADIUS = 4.0
 # Camera FOV (field of view in degrees)
 CAMERA_FOV = 120  # Default cone angle
 
+# Number of rays for camera capturing (each ray captures RGB = 3 values)
+# This controls the embedding dimension: num_rays * 3
+CAMERA_NUM_RAYS = 100  # Default number of camera rays
+
 # Embedding encoding method
 # True: Interleaved RGB per pixel [R0, G0, B0, R1, G1, B1, ...]
 # False: Channel-separated [R0, R1, ..., G0, G1, ..., B0, B1, ...]
@@ -91,9 +95,11 @@ TOOLBAR BUTTONS:
 SETTINGS:
 • Blur Radius - Amount of blur applied to camera observations
 • Field of View - Viewing angle of the robot's camera (30-360°)
+• Number of Camera Rays - Number of rays captured (controls embedding dimension: rays × 3)
 • Visibility Index - How far the robot can see (0.01-1.0)
 • Beta (Inverse Temp) - Sharpness of retrieval (higher = more selective)
 • Combine top k matches - Number of closest matches to average for prediction
+• Number of Angles per Location - Number of orientations sampled at each training position
 • Noise Settings - Add random circular obstacles to the map
 • Interleaved RGB encoding - Alternative pattern encoding method
 

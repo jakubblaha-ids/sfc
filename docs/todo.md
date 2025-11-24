@@ -1,6 +1,4 @@
 Crucial:
--   fix scrolling
--   pattern dimension
 -   which angle is shown when hovering?
 -   how does angle averaging work?
 -   visualize energy function
@@ -15,6 +13,8 @@ Nice to have:
 -   number of inference iterations
 -   energy function variant
 -   maybe different energy function variants?
+-   fix scrolling
 
 Done:
 -   number of angles
+-   pattern dimension
