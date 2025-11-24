@@ -1,0 +1,101 @@
+% Save as dfa.tex and compile with: pdflatex dfa.tex
+\documentclass[12pt]{article}
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+
+\DeclareMathOperator*{\lse}{lse}
+\DeclareMathOperator*{\softmax}{softmax}
+
+\begin{document}
+
+\title{SFC Course Project Documentation \\ Localization using a Modern Hopfield Network}
+\author{Jakub Bláha \\ \texttt{xblaha36@stud.fit.vutbr.cz}}
+\date{}
+\maketitle
+
+\section{Introduction}
+
+This project demonstrates robot localization on a 2D map using a Modern
+Hopfield Network for pattern matching. The core problem is to determine a
+robot's position based on its local visual observations of the environment.
+
+The approach works in two phases: a \textbf{setup phase} where the robot
+explores the map and builds a memory database of position-observation pairs,
+and a \textbf{query phase} where the robot uses a new observation to retrieve
+its approximate position from memory. The robot captures small visual patches
+(e.g., strips of pixels representing what a simple camera would see) at various
+known positions. These observations, along with their corresponding positions,
+are stored as patterns in the network's memory.
+
+When presented with a new observation, the network performs energy minimization
+to retrieve the most similar stored patterns. The robot's position is then
+estimated based on the top-k most similar observations, effectively localizing
+the robot by combining information from the best matching visual features. The
+implementation provides an interactive visualization showing the map, the
+robot's movement, its field of view, and the real-time localization process.
+Users can configure network parameters such as temperature ($\beta$), number of
+observations stored, observation dimensions, and the number of retrieval
+iterations.
+
+\section{Modern Hopfield Networks}
+
+Hopfield Networks are associative memory models that can store and retrieve
+patterns. Classical Hopfield networks had limited storage capacity
+(approximately 0.14N patterns for N neurons) and often retrieved incorrect
+patterns called spurious attractors.
+
+Modern Hopfield Networks significantly improve upon the classical version by
+using a different energy function that allows storing exponentially more
+patterns while providing better retrieval accuracy. The network works by
+storing patterns in memory during a learning phase, then retrieving the most
+similar patterns when presented with a new query.
+
+A key parameter is the temperature ($\beta$), which controls how selective the
+retrieval is. Higher values make the network focus on fewer best matches, while
+lower values allow it to consider a broader range of similar patterns. This is
+useful when the robot's observation might match several nearby positions on the
+map.
+
+\section{Implementation}
+% Architecture overview
+% Data structures (map representation, observations, memory)
+% Setup phase: building the observation database
+% Query phase: position retrieval given new observation
+% Algorithm pseudocode
+
+\section{User Manual}
+\subsection{Requirements}
+% Python version, required libraries, system requirements
+
+\subsection{Compilation and Installation}
+% How to install dependencies
+% Any setup steps needed
+
+\subsection{Running the Program}
+% Command-line interface
+% Configuration file format
+% Interactive mode usage
+
+\subsection{Program Control}
+% Available commands during execution
+% How to perform step-by-step execution
+% How to interrupt/terminate
+% Output interpretation
+
+\section{Results and Discussion}
+% Example runs with screenshots/figures
+% Accuracy analysis
+% Performance characteristics
+% Limitations and possible improvements
+
+\section{Conclusion}
+% Summary of achievements
+% Lessons learned
+
+% \bibliographystyle{plain}
+% \bibliography{references}
+
+\end{document}
