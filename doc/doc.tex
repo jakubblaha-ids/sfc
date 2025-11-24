@@ -5,6 +5,8 @@
 \usepackage{hyperref}
 \usepackage[margin=2.5cm]{geometry}
 \usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{gensymb}
 
 \DeclareMathOperator*{\lse}{lse}
 \DeclareMathOperator*{\softmax}{softmax}
@@ -47,8 +49,8 @@ patterns. Classical Hopfield networks had limited storage capacity
 (approximately 0.14N patterns for N neurons) and often retrieved incorrect
 patterns called spurious attractors.
 
-Modern Hopfield Networks\footnote{Ramsauer, H., Schäfl, B., Lehner, J., et al.
-(2020). Hopfield Networks is All You Need. arXiv:2008.02217.
+Modern Hopfield Networks (MHN)\footnote{Ramsauer, H., Schäfl, B., Lehner, J.,
+et al. (2020). Hopfield Networks is All You Need. arXiv:2008.02217.
 \url{https://arxiv.org/abs/2008.02217}}\footnote{Modern Hopfield Network.
 Wikipedia. \url{https://en.wikipedia.org/wiki/Modern_Hopfield_network}}
 significantly improve upon the classical version by using a different energy
@@ -64,11 +66,134 @@ useful when the robot's observation might match several nearby positions on the
 map.
 
 \section{Implementation}
-% Architecture overview
-% Data structures (map representation, observations, memory)
-% Setup phase: building the observation database
-% Query phase: position retrieval given new observation
-% Algorithm pseudocode
+
+The project is implemented in Python with the use of the following libraries:
+Tkinter, Pillow and matplotlib for the UI, numpy and scipy for computations.
+Implementation is split into several files in the effort to encapsulate similar
+logic together.
+
+User interface and app state lives inside \texttt{main.py}, \texttt{editor.py}
+and \texttt{robot\_state.py}, MHN is implemented inside \texttt{hopfield.py},
+camera sample capturing in \texttt{camera.py}, position prediction with
+weighted averaging inside \texttt{localization.py}.
+
+\subsection{MHN Implementation}
+
+The core pattern matching is implemented in \texttt{ModernHopfieldNetwork}
+class using the continuous energy formulation. Patterns are stored as an $N
+\times D$ matrix where $N$ is the number of patterns and $D$ is the embedding
+dimension.
+
+The network uses the energy function
+\begin{equation}
+    E(x) = -\log\left(\sum_i \exp(\beta \cdot x^T \cdot \xi_i)\right)
+\end{equation}
+where $x$ is the query pattern, $\xi_i$ are stored patterns (normalized for
+cosine similarity), and $\beta$ is the inverse temperature parameter.
+
+During training, patterns are stored directly in memory and normalized for
+cosine similarity computation. The L2 norm is computed for each pattern vector,
+avoiding division by zero with a minimum threshold.
+
+Given a query pattern, the network computes cosine similarities with all stored
+patterns, scales them by $\beta \cdot \sqrt{D}$ for numerical stability, and
+applies softmax to obtain attention weights. The top-k patterns with highest
+attention weights are returned along with their weights for position
+estimation.
+
+The temperature parameter ($\beta$) controls retrieval selectivity. Higher
+values make the network focus sharply on the best match. Lower values allow
+broader consideration of similar patterns.
+
+\subsection{Observation capturing}
+
+Visual observations are captured using a raycasting camera simulator
+implemented in \texttt{CameraSimulator}. The robot's field of view is
+represented as a cone defined by an angle (30-360°).
+
+For each of the $N$ angular samples within the viewing cone (where $N$ is
+configurable), a ray is cast from the robot's position outward until hitting a
+wall (non-white pixel) or map boundary. The ray advances in discrete steps
+checking for obstacles. Each raycast determines the distance to the nearest
+obstacle in that direction.
+
+The intensity of observed colors is modulated by distance. Colors fade toward
+white based on the distance to the obstacle, controlled by a configurable
+visibility index factor. This simulates limited visibility where distant
+objects appear less distinct.
+
+The captured sample forms a one-dimensional vector where values correspond to
+the distance-modulated colors found on the map at raycast hit points. The
+application supports two modes of RGB encoding for converting the observation
+into the pattern vector: interleaved encoding and channel-separated encoding.
+
+Optional gaussian blur is applied to observations to reduce noise sensitivity
+and improve localization accuracy.
+
+The output of a single camera capture is therefore $N \cdot 3$ float values,
+where $N$ is the number of rays cast. For a single capture position on the map,
+this is done $M$ times, where $M$ is the number of angles the robot should
+capture for a single position.
+
+\subsection{Sampling strategy}
+
+The map is divided into an $N_x \times N_y$ grid and the robot captures
+observations from $N_{\text{angles}}$ different angles at each grid position,
+resulting in a total of $N_x \cdot N_y \cdot N_{\text{angles}}$ stored samples
+indexed as $\text{sample\_index} = (\text{grid\_y} \cdot N_x + \text{grid\_x})
+\cdot N_{\text{angles}} + \text{angle\_index}$. The coordinates and angles of
+the predicted position are determined from this index during prediction.
+
+Positions are centered in grid cells with a half-stride offset applied to avoid
+map edges.
+
+\subsection{Training and inference}
+
+During setup phase, the robot systematically visits positions on a grid with
+multiple orientations for each position. At each position, a camera observation
+is captured and stored with its ground-truth coordinates.
+
+During training collected observations are converted to embeddings and passed
+to the Hopfield network for storage. Training is instantaneous as Modern
+Hopfield Networks require no iterative optimization.
+
+During inference, a query observation is converted to an embedding vector and
+passed to the MHN. The network retrieves the top-k closest matching patterns
+using attention weights computed from the energy function.
+
+For $k=1$, the robot's position is determined directly from the best matching
+stored observation. For $k>1$, a weighted average position is computed using
+normalized attention weights from the network and the grid coordinates of the
+matched patterns. The orientation is taken from the best matching pattern. This
+allows the network to combine information from multiple similar observations,
+possibly providing more accurate localization when multiple positions have
+similar visual features.
+
+\subsection{Configurable options}
+
+The following options are configurable using the UI:
+
+\begin{itemize}
+    \item \textbf{Beta ($\beta$)}: Inverse temperature (1.0–200.0, default 50.0). Controls sharpness of pattern retrieval. Higher values make the network focus on the best matches; lower values broaden the retrieval.
+    \item \textbf{Sample Stride}: Grid spacing for sample positions (default 50 pixels). Smaller values increase memory size but improve coverage density of the map.
+    \item \textbf{Sample Rotations}: Number of orientations per position (default 16, equivalent to 22.5° steps). More rotations improve orientation accuracy during localization.
+    \item \textbf{Camera Samples}: Number of rays in observation strip (fixed at 100). Determines the dimensionality of captured observations.
+    \item \textbf{Blur Radius}: Gaussian blur applied to observations (0–5.0, default 4.0). Reduces noise sensitivity and improves localization robustness.
+    \item \textbf{Field of View}: Camera viewing angle (30–360°, default 120°). Wider FOV captures more context.
+    \item \textbf{Visibility Index}: Distance opacity factor (0.01–1.0, default 0.1). Lower values make distant objects fade more quickly, simulating limited visibility.
+    \item \textbf{Top-k}: Number of matches to combine (1–20, default 1). Values greater than 1 smooth predictions by averaging multiple similar observations.
+\end{itemize}
+
+Configuration parameters are stored in JSON format in
+\texttt{./tmp/sfc\_config.json}, allowing users to save and restore their
+settings between sessions. The application automatically loads the last used
+map on startup for convenience. Map images are stored and loaded as PNG files.
+
+\subsection{Extra features}
+
+\subsubsection*{Confidence heatmap}
+
+\subsubsection*{Map editor}
 
 \section{User Manual}
 \subsection{Requirements}
