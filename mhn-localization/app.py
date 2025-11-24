@@ -6,7 +6,7 @@ from PIL import Image, ImageTk, ImageDraw
 from .editor import MapEditor
 from .config import ConfigManager
 from .robot_state import RobotState
-from .camera_simulator import CameraSimulator
+from .camera import CameraSimulator
 from .localization_engine import LocalizationEngine
 from .sampling_engine import SamplingEngine
 from .confidence_analyzer import ConfidenceAnalyzer

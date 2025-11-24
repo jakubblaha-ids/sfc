@@ -1,5 +1,5 @@
 import numpy as np
-from .hopfield import ModernHopfieldNetwork
+from .mhn import ModernHopfieldNetwork
 from .constants import INTERLEAVED_RGB
 
 
