@@ -229,15 +229,11 @@ class App:
             "<Configure>", lambda e: canvas.configure(
                 scrollregion=canvas.bbox("all")))
 
-        canvas.create_window((0, 0), window=self.right_panel, anchor="nw")
+        canvas.create_window((0, 0), window=self.right_panel, anchor="nw", width=380)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        spacer_width = 100
-        spacer_frame = ttk.Frame(self.right_panel, width=spacer_width)
-        spacer_frame.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Add content to the right panel
         input_frame = tk.LabelFrame(self.right_panel, text="Current Input")
