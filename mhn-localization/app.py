@@ -17,6 +17,10 @@ import math
 import os
 import numpy as np
 from .convergence_controller import ConvergenceController
+import random
+from tkinter import simpledialog
+
+import matplotlib.pyplot as plt
 
 class App:
     def __init__(self):
@@ -609,7 +613,6 @@ class App:
 
     def generate_noise_circles(self):
         """Generate random circles for noise based on noise_amount"""
-        import random
 
         self.canvas_state.noise_circles = []
 
@@ -813,7 +816,6 @@ class App:
         Start the auto-exploration and training process.
         Collects samples from a grid and trains the network to find optimal prototypes.
         """
-        from tkinter import simpledialog
         
         # Get grid positions to calculate total samples
         grid_positions = self.sampling.generate_sample_positions()
@@ -889,12 +891,6 @@ class App:
         Show a popup window with training statistics (loss curve) using Matplotlib.
         """
         if not loss_history:
-            return
-            
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            self.status_label['text'] = "❌ Matplotlib not found. Cannot show stats."
             return
             
         plt.figure(figsize=(8, 5))

@@ -1,6 +1,7 @@
 import numpy as np
 from .mhn import ModernHopfieldNetwork
-from .constants import INTERLEAVED_RGB
+from .constants import INTERLEAVED_RGB, MAP_WIDTH, MAP_HEIGHT
+import traceback
 
 
 class LocalizationEngine:
@@ -131,7 +132,6 @@ class LocalizationEngine:
             return True, loss_history
         except Exception as e:
             print(f"SGD Training error: {e}")
-            import traceback
             traceback.print_exc()
             return False, []
 
@@ -240,7 +240,6 @@ class LocalizationEngine:
         Encode positions (x, y, angle) into a continuous vector format for averaging.
         Format: [x/W, y/H, sin(angle), cos(angle)]
         """
-        from .constants import MAP_WIDTH, MAP_HEIGHT
         encoded = []
         for x, y, angle in positions:
             rad = np.radians(angle)
@@ -256,7 +255,6 @@ class LocalizationEngine:
         """
         Decode encoded position vector back to (x, y, angle).
         """
-        from .constants import MAP_WIDTH, MAP_HEIGHT
         nx, ny, ns, nc = encoded_pos
         x = nx * MAP_WIDTH
         y = ny * MAP_HEIGHT
