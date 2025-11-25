@@ -1,5 +1,5 @@
 ZIP_NAME = 9-xblaha36.zip
-FILES_TO_PACK = doc/doc.pdf doc/doc.tex mhn-localization requirements.txt maps install.sh
+FILES_TO_PACK = doc/doc.pdf doc/doc.tex mhn-localization requirements.txt maps install-and-run.sh
 
 .PHONY: pack clean
 
