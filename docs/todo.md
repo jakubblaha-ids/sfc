@@ -1,7 +1,10 @@
 Crucial:
--   how does angle averaging work?
--   visualize energy function
+-   noise to docs
 -   why normalization
+-   maybe change angle averaging?
+-   energy heatmap
+-   convergence mode
+-   plot of energy function during convergence
 
 Nice to have:
 -   add how this maps to real world case into docs
@@ -13,6 +16,7 @@ Nice to have:
 -   energy function variant
 -   maybe different energy function variants?
 -   fix scrolling
+-   realtime energy updates
 
 Done:
 -   number of angles

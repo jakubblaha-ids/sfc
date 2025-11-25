@@ -137,6 +137,97 @@ class ModernHopfieldNetwork:
 
         return energy
 
+    def update_step(self, query):
+        """
+        Perform one step of the Modern Hopfield Network update rule.
+        Update rule: x^(t+1) = softmax(beta * M^T * x^(t)) * M
+        where M is the memory matrix (stored patterns).
+
+        Args:
+            query: numpy array of shape (embedding_dim,) - current state vector
+
+        Returns:
+            tuple: (updated_query, converged)
+                - updated_query: numpy array of shape (embedding_dim,) - new state
+                - converged: bool - True if converged to a fixed point
+        """
+        if self.memory is None:
+            raise ValueError("Network not trained. Call train() first.")
+
+        # Normalize query for cosine similarity
+        query_norm = np.linalg.norm(query)
+        if query_norm == 0:
+            query_norm = 1
+        query_normalized = query / query_norm
+
+        # Compute cosine similarities between query and all stored patterns
+        similarities = np.dot(self.memory_normalized, query_normalized)
+
+        # Apply scaled softmax (Modern Hopfield update rule)
+        scaled_similarities = self.beta * similarities * np.sqrt(self.embedding_dim)
+
+        # Compute softmax to get attention weights
+        exp_similarities = np.exp(scaled_similarities - np.max(scaled_similarities))
+        attention_weights = exp_similarities / np.sum(exp_similarities)
+
+        # Update rule: weighted sum of stored patterns
+        updated_query = np.dot(attention_weights, self.memory)
+
+        # Check convergence: if the update doesn't change the state significantly
+        convergence_threshold = 1e-6
+        change = np.linalg.norm(updated_query - query)
+        converged = change < convergence_threshold
+
+        return updated_query, converged
+
+    def converge(self, query, max_iterations=100):
+        """
+        Iteratively apply the update rule until convergence.
+        This finds the fixed point (attractor) in the energy landscape.
+
+        Args:
+            query: numpy array of shape (embedding_dim,) - initial state vector
+            max_iterations: Maximum number of update steps (default: 100)
+
+        Returns:
+            dict with keys:
+                - 'final_state': final converged embedding vector
+                - 'history': list of states at each iteration
+                - 'converged': whether it actually converged
+                - 'iterations': number of iterations performed
+                - 'best_match_idx': index of the pattern closest to final state
+        """
+        if self.memory is None:
+            raise ValueError("Network not trained. Call train() first.")
+
+        current_state = query.copy()
+        history = [current_state.copy()]
+        converged = False
+
+        for _ in range(max_iterations):
+            current_state, converged = self.update_step(current_state)
+            history.append(current_state.copy())
+
+            if converged:
+                break
+
+        # Find which stored pattern the final state is closest to
+        final_norm = np.linalg.norm(current_state)
+        if final_norm == 0:
+            final_norm = 1
+        final_normalized = current_state / final_norm
+
+        similarities = np.dot(self.memory_normalized, final_normalized)
+        best_match_idx = int(np.argmax(similarities))
+
+        return {
+            'final_state': current_state,
+            'history': history,
+            'converged': converged,
+            'iterations': len(history) - 1,
+            'best_match_idx': best_match_idx
+        }
+
     def clear(self):
         """Clear the network memory."""
         self.memory = None

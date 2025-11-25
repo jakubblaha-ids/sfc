@@ -90,6 +90,7 @@ TOOLBAR BUTTONS:
 • Import Map - Load a map from a PNG file
 • Export Map - Save the current map to a PNG file
 • Sample & Train - Generate observation samples and train the network
+• Converge to Pattern - Iteratively move robot toward best matching pattern
 • Help - Show this help dialog
 
 SETTINGS:
@@ -120,4 +121,13 @@ DISPLAY PANELS:
 • Current Input - What the robot currently sees
 • Retrieved Memory - The closest matching stored pattern
 • Similarity Metric - Confidence score of the match (0-100%)
+
+CONVERGENCE MODE:
+The "Converge to Pattern" button applies the Modern Hopfield Network update rule 
+iteratively on the current observation embedding. The update rule is:
+  x^(t+1) = softmax(β * M^T * x^(t)) * M
+This demonstrates how the network converges to stored memory patterns through 
+iterative refinement in the embedding space. Each convergence step is visualized 
+as a horizontal strip in the top-left corner, showing how the observation evolves 
+toward a stored pattern. The final step is highlighted in green.
 """
