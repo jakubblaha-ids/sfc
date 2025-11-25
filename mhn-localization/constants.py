@@ -90,6 +90,7 @@ TOOLBAR BUTTONS:
 • Import Map - Load a map from a PNG file
 • Export Map - Save the current map to a PNG file
 • Sample & Train - Generate observation samples and train the network
+• Train using SGD - Collect grid samples and train prototypes using SGD
 • Converge to Pattern - Iteratively move robot toward best matching pattern
 • Help - Show this help dialog
 
@@ -122,6 +123,16 @@ DISPLAY PANELS:
 • Retrieved Memory - The closest matching stored pattern
 • Similarity Metric - Confidence score of the match (0-100%)
 
+SGD TRAINING:
+The "Train using SGD" button initiates an auto-exploration and training process:
+1. The robot automatically visits a grid of positions across the map.
+2. At each position, it captures observations from multiple angles.
+3. These observations are used to train the Modern Hopfield Network prototypes 
+   using Stochastic Gradient Descent (SGD).
+4. The goal is to minimize the difference between the stored prototypes and 
+   the actual observations at their respective positions.
+5. This results in more robust localization compared to simple sampling.
+
 CONVERGENCE MODE:
 The "Converge to Pattern" button applies the Modern Hopfield Network update rule 
 iteratively on the current observation embedding. The update rule is:
@@ -130,4 +141,34 @@ This demonstrates how the network converges to stored memory patterns through
 iterative refinement in the embedding space. Each convergence step is visualized 
 as a horizontal strip in the top-left corner, showing how the observation evolves 
 toward a stored pattern. The final step is highlighted in green.
+
+HOW IT WORKS:
+This project uses a Modern Hopfield Network (MHN) for robot localization.
+The core idea is to store "memories" of what the world looks like from different 
+positions, and then use those memories to figure out where the robot is.
+
+There are two ways to teach the network:
+
+1. STANDARD SAMPLING ("Sample & Train"):
+   - The robot visits a grid of positions.
+   - At each spot, it takes a picture (observation).
+   - It stores EVERY picture directly in memory.
+   - Pros: Very fast training (instant), guaranteed to have exact matches.
+   - Cons: Uses a lot of memory, can be slow to query if map is huge.
+
+2. SGD TRAINING ("Train using SGD"):
+   - The robot also visits a grid of positions to collect data.
+   - BUT, instead of storing everything, it initializes a smaller set of 
+     random "prototypes".
+   - It uses Stochastic Gradient Descent (SGD) to move these prototypes 
+     around until they best represent the clusters of visual information.
+   - Pros: Much more efficient (uses fewer patterns).
+   - Cons: Training takes longer (iterative process).
+
+LOCALIZATION PROCESS:
+1. The robot sees something (Query).
+2. The network compares this view to all stored memories/prototypes.
+3. It finds the "Top-K" best matches.
+4. The robot's position is estimated as the weighted average of the 
+   positions of these best matches.
 """

@@ -146,7 +146,7 @@ class App:
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
 
         self.status_label = ttk.Label(
-            self.status_frame, text="Press Sample & Train!", anchor="w")
+            self.status_frame, text="Train using sampling or SGD!", anchor="w")
         self.status_label.pack(side=tk.LEFT, fill=tk.X,
                                expand=True, padx=5, pady=2)
 
@@ -155,13 +155,21 @@ class App:
             "Edit Map": self.open_map_editor,
             "Import Map": self.import_map,
             "Export Map": self.export_map,
-            "Sample & Train": self.sample_and_train
+            "Train using sampling": self.sample_and_train
         }
 
         for btn_text, command in buttons.items():
             btn = ttk.Button(self.toolbar_frame,
                              text=btn_text, command=command)
             btn.pack(side=tk.LEFT, padx=5)
+
+        # Add Auto-Explore & Train button
+        self.auto_explore_btn = ttk.Button(
+            self.toolbar_frame,
+            text="Train using SGD",
+            command=self.start_auto_exploration
+        )
+        self.auto_explore_btn.pack(side=tk.LEFT, padx=5)
 
         # Add convergence button
         self.converge_btn = ttk.Button(
@@ -171,7 +179,6 @@ class App:
         )
         self.converge_btn.pack(side=tk.LEFT, padx=5)
 
-        # Add clear convergence button
         self.clear_convergence_btn = ttk.Button(
             self.toolbar_frame,
             text="Clear Convergence",
@@ -799,14 +806,106 @@ class App:
             self.localization.add_sample(x, y, angle, camera_view)
 
         self.robot.restore_state(original_state)
-
         self.update_map_display()
 
-        self.status_label['text'] = ""
+    def start_auto_exploration(self):
+        """
+        Start the auto-exploration and training process.
+        Collects samples from a grid and trains the network to find optimal prototypes.
+        """
+        from tkinter import simpledialog
+        
+        # Get grid positions to calculate total samples
+        grid_positions = self.sampling.generate_sample_positions()
+        total_samples = len(grid_positions)
+        
+        # Ask for number of patterns to learn
+        num_patterns = simpledialog.askinteger(
+            "Auto-Explore & Train", 
+            f"Grid sampling will collect {total_samples} observations.\n\n"
+            "How many patterns (prototypes) should the network learn?",
+            parent=self.root, minvalue=1, maxvalue=total_samples, initialvalue=min(100, total_samples // 10)
+        )
+        if num_patterns is None:
+            return
+            
+        self.status_label['text'] = "⟳ Exploring... Collecting grid samples..."
+        self.root.update()
+        
+        original_state = self.robot.copy_state()
+        
+        # Clear existing samples
+        self.localization.clear_samples()
+        
+        map_image = self.get_map_for_raytracing()
+        
+        # Collect samples from grid
+        for i, (x, y, angle) in enumerate(grid_positions):
+            # Move robot visually
+            self.robot.x = x
+            self.robot.y = y
+            self.robot.angle = angle
+            self.canvas_state.robot_x = x
+            self.canvas_state.robot_y = y
+            self.canvas_state.robot_angle = angle
+            
+            # Capture view
+            camera_view = self.camera.capture_view(x, y, angle, map_image)
+            self.localization.add_sample(x, y, angle, camera_view)
+            
+            if i % 50 == 0:
+                self.status_label['text'] = f"⟳ Exploring... Sample {i+1}/{total_samples}"
+                self.root.update()
+                
+        self.update_map_display()
+        
+        # Train
+        self.status_label['text'] = f"⟳ Training network with {num_patterns} patterns..."
+        self.root.update()
+        
+        def train_callback(epoch, total, loss):
+            if epoch % 5 == 0 or epoch == total:
+                self.status_label['text'] = f"⟳ Training... Epoch {epoch}/{total}, Loss: {loss:.4f}"
+                self.root.update()
+        
+        success, loss_history = self.localization.train_sgd(
+            num_patterns=num_patterns,
+            learning_rate=0.1,
+            epochs=100,
+            progress_callback=train_callback
+        )
+        
+        if success:
+            self.status_label['text'] = f"✓ Exploration complete! Learned {num_patterns} patterns from {total_samples} samples."
+            self.show_training_stats(loss_history)
+        else:
+            self.status_label['text'] = "❌ Training failed."
+            
+        self.robot.restore_state(original_state)
+        self.update_map_display()
 
-        if show_message:
-            self.status_label['text'] = f"✓ Generated {
-                self.localization.get_num_samples()}  samples"
+    def show_training_stats(self, loss_history):
+        """
+        Show a popup window with training statistics (loss curve) using Matplotlib.
+        """
+        if not loss_history:
+            return
+            
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            self.status_label['text'] = "❌ Matplotlib not found. Cannot show stats."
+            return
+            
+        plt.figure(figsize=(8, 5))
+        plt.plot(loss_history, 'b-', linewidth=2)
+        plt.title("Training Loss (Energy)")
+        plt.xlabel("Epochs")
+        plt.ylabel("Energy")
+        plt.grid(True)
+        plt.show(block=False)
+
+
 
     def train_network(self, show_message=True):
         """

@@ -52,6 +52,139 @@ class ModernHopfieldNetwork:
         print(
             f"Training complete: {self.num_patterns} patterns stored and normalized")
 
+    def train_sgd(self, observations, associated_data=None, num_patterns=None, learning_rate=0.01, epochs=100, batch_size=32, progress_callback=None):
+        """
+        Train the network using Gradient Descent to minimize energy on observations.
+        This learns optimal patterns (prototypes) that represent the data.
+        Also updates associated data (e.g., positions) if provided.
+
+        Args:
+            observations: numpy array of shape (N_samples, embedding_dim)
+            associated_data: numpy array of shape (N_samples, data_dim) or None
+            num_patterns: Number of patterns to learn. If None, uses len(observations)
+            learning_rate: Learning rate for SGD
+            epochs: Number of training epochs
+            batch_size: Batch size for training
+            progress_callback: Optional function(epoch, total_epochs, loss) called after each epoch
+
+        Returns:
+            list: History of average energy (loss) per epoch
+        """
+        observations = np.array(observations, dtype=np.float32)
+        n_samples = len(observations)
+        
+        if num_patterns is None:
+            num_patterns = n_samples
+            
+        # Initialize memory (patterns)
+        # We can initialize with a random subset of observations
+        indices = np.random.choice(n_samples, num_patterns, replace=(num_patterns > n_samples))
+        self.memory = observations[indices].copy()
+        self.num_patterns = num_patterns
+        
+        # Initialize associated data memory if provided
+        self.memory_associated_data = None
+        if associated_data is not None:
+            associated_data = np.array(associated_data, dtype=np.float32)
+            self.memory_associated_data = associated_data[indices].copy()
+        
+        # Normalize initial memory
+        norms = np.linalg.norm(self.memory, axis=1, keepdims=True)
+        norms = np.where(norms == 0, 1, norms)
+        self.memory_normalized = self.memory / norms
+        
+        loss_history = []
+        
+        # Training loop
+        for epoch in range(epochs):
+            # Shuffle data
+            perm = np.random.permutation(n_samples)
+            observations_shuffled = observations[perm]
+            if associated_data is not None:
+                associated_data_shuffled = associated_data[perm]
+            
+            total_energy = 0
+            
+            for i in range(0, n_samples, batch_size):
+                batch = observations_shuffled[i:i+batch_size]
+                
+                # Normalize batch
+                batch_norms = np.linalg.norm(batch, axis=1, keepdims=True)
+                batch_norms = np.where(batch_norms == 0, 1, batch_norms)
+                batch_normalized = batch / batch_norms
+                
+                # Compute similarities: (batch_size, num_patterns)
+                similarities = np.dot(batch_normalized, self.memory_normalized.T)
+                
+                # Scale similarities
+                scaled_sim = self.beta * similarities * np.sqrt(self.embedding_dim)
+                
+                # Compute softmax (attention)
+                # (batch_size, num_patterns)
+                max_sim = np.max(scaled_sim, axis=1, keepdims=True)
+                exp_sim = np.exp(scaled_sim - max_sim)
+                sum_exp = np.sum(exp_sim, axis=1, keepdims=True)
+                attention = exp_sim / sum_exp
+                
+                # Compute energy for loss tracking
+                # E = -log(sum(exp(scaled_sim)))
+                log_sum_exp = max_sim + np.log(sum_exp)
+                batch_energy = -np.sum(log_sum_exp)
+                total_energy += batch_energy
+                
+                # Compute gradients for memory
+                # The energy function is E = -lse(beta * x^T * M)
+                # dE/dM = -beta * x * (softmax(beta * x^T * M))^T
+                # We want to minimize energy, so we move in negative gradient direction
+                # Update: M = M - lr * dE/dM = M + lr * beta * x * softmax^T
+                
+                # However, we are optimizing the NORMALIZED memory in the dot product, 
+                # but we store unnormalized memory. 
+                # For simplicity in this version, we assume we are optimizing the vectors directly
+                # and re-normalize after update.
+                
+                # Gradient update:
+                # We want to pull patterns closer to observations that attend to them.
+                # Delta M = lr * (batch_normalized.T @ attention).T = lr * attention.T @ batch_normalized
+                # Shape: (num_patterns, batch_size) @ (batch_size, dim) -> (num_patterns, dim)
+                
+                grad = np.dot(attention.T, batch_normalized)
+                
+                # Update memory
+                # We average the gradient by batch size to keep LR stable
+                self.memory += learning_rate * grad / batch_size
+                
+                # Re-normalize memory immediately to keep it on hypersphere
+                norms = np.linalg.norm(self.memory, axis=1, keepdims=True)
+                norms = np.where(norms == 0, 1, norms)
+                self.memory = self.memory / norms # Project back to unit sphere if desired, or just normalize for next step
+                self.memory_normalized = self.memory # Since we just normalized it
+                
+                # Update associated data (positions)
+                if self.memory_associated_data is not None:
+                    batch_assoc = associated_data_shuffled[i:i+batch_size]
+                    # Gradient for associated data: pull towards associated data of attending samples
+                    # We want to minimize distance: E = 0.5 * sum(attn * ||data - mem||^2)
+                    # dE/dM = -sum(attn * (data - mem)) = sum(attn * data) - sum(attn) * mem
+                    
+                    weighted_sum_data = np.dot(attention.T, batch_assoc)
+                    sum_weights = np.sum(attention, axis=0, keepdims=True).T
+                    
+                    grad_assoc = weighted_sum_data - sum_weights * self.memory_associated_data
+                    
+                    self.memory_associated_data += learning_rate * grad_assoc / batch_size
+            
+            avg_loss = total_energy / n_samples
+            loss_history.append(avg_loss)
+            
+            if progress_callback:
+                progress_callback(epoch + 1, epochs, avg_loss)
+            elif (epoch + 1) % 10 == 0:
+                print(f"Epoch {epoch+1}/{epochs} complete, Loss: {avg_loss:.4f}")
+                
+        print(f"SGD Training complete. Learned {self.num_patterns} patterns.")
+        return loss_history, indices
+
     def retrieve(self, query, top_k=1):
         """
         Retrieve the closest matching pattern(s) from memory using Modern Hopfield Network.

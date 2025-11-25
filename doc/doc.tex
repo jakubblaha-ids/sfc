@@ -261,6 +261,18 @@ a part of the camera view is occupied.
 gradually updating the state using the MHN update rule and displaying the state
 obtained in different iterations on the screen.
 
+\paragraph{K-Means SGD Training} allows the network to learn a compact set of prototypes from the collected data
+instead of storing all samples. The prototypes are initialized as a random
+subset of the collected observations. Then, Stochastic Gradient Descent (SGD)
+is used to iteratively update these prototypes to minimize the total energy of
+the training set $\mathcal{X} = \{\mathbf{x}_1, \dots, \mathbf{x}_N\}$
+consisting of all observations captured during the grid sampling phase. The
+loss function is defined as the sum of energies $L = \sum_{\mathbf{x} \in
+\mathcal{X}} E(\mathbf{x})$. By jointly optimizing both the visual patterns and
+their associated positions using a K-Means style update rule, the prototypes
+drift to the spatial centers of the visual clusters they represent, ensuring
+somewhat accurate localization with significantly fewer stored patterns.
+
 \section{Running the Program}
 
 To run the program, create a virtual environment, install dependencies and
