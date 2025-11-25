@@ -16,7 +16,7 @@ from .utils import embedding_to_image
 import math
 import os
 import numpy as np
-
+from .convergence_controller import ConvergenceController
 
 class App:
     def __init__(self):
@@ -89,13 +89,19 @@ class App:
 
         self._hovered_strip_images = []
 
+        self.convergence_controller = ConvergenceController(
+            self.localization,
+            self.canvas_state,
+            lambda msg: self.status_label.config(text=msg),
+            self.update_map_display
+        )
+        self.convergence_controller.on_convergence_finished = lambda: self.converge_btn.config(text="Converge to Pattern")
+
         self.keys_pressed = set()
         self.update_interval = 16
 
         self.rotation_keys_pressed = set()
 
-        self.is_converging = False
-        self.convergence_step = 0
 
         self.create_layout()
         self.create_toolbar()
@@ -916,8 +922,7 @@ class App:
             self.canvas_state.hovered_sample_idx = closest_idx
 
             # Clear stored hover images
-            if hasattr(self, '_hovered_strip_images'):
-                self._hovered_strip_images = []
+            self._hovered_strip_images = []
 
             if closest_idx is not None:
                 self.display_saved_sample(closest_idx)
@@ -1143,8 +1148,8 @@ class App:
     def update_loop(self):
         """Continuous update loop for smooth movement"""
         # Handle convergence mode
-        if self.is_converging:
-            self.convergence_step_update()
+        if self.convergence_controller.is_converging:
+            self.convergence_controller.step()
         else:
             # Normal movement controls
             dx, dy = 0, 0
@@ -1174,122 +1179,17 @@ class App:
 
     def start_convergence(self):
         """Start the convergence process using MHN update rule on embedding"""
-        if not self.localization.is_trained:
-            self.status_label['text'] = "⚠️ Network not trained. Please use 'Sample & Train' first."
-            return
-
-        if self.is_converging:
-            # Stop convergence
-            self.is_converging = False
-            self.converge_btn.config(text="Converge to Pattern")
-            self.status_label['text'] = f"✓ Convergence stopped after {self.convergence_step} steps"
-            if hasattr(self, 'convergence_embedding'):
-                delattr(self, 'convergence_embedding')
-            # Clear visualization
-            self.canvas_state.convergence_visualization_strips = []
-            self.canvas_state.converged_position = None
-            if hasattr(self, '_convergence_strip_images'):
-                self._convergence_strip_images = []
-            self.update_map_display()
+        if self.convergence_controller.is_converging:
+            self.convergence_controller.stop_convergence()
         else:
-            # Start convergence
-            self.is_converging = True
-            self.convergence_step = 0
-            self.canvas_state.convergence_visualization_strips = []
-            self.canvas_state.converged_position = None
-            # convergence_embedding will be initialized in convergence_step_update
-            self.converge_btn.config(text="Stop Convergence")
-            self.status_label['text'] = "⟳ Converging to pattern..."
+            started = self.convergence_controller.start_convergence(self.current_camera_view)
+            if started:
+                self.converge_btn.config(text="Stop Convergence")
 
-    def convergence_step_update(self):
-        """Perform one step of the MHN update rule on the embedding vector"""
-        if not self.localization.is_trained:
-            self.is_converging = False
-            self.converge_btn.config(text="Converge to Pattern")
-            return
-
-        if not self.localization.hopfield_network:
-            self.is_converging = False
-            self.converge_btn.config(text="Converge to Pattern")
-            return
-
-        # Get current embedding from the stored convergence state
-        if not hasattr(self, 'convergence_embedding'):
-            # Initialize with current camera view
-            self.convergence_embedding = self.localization._create_embedding(self.current_camera_view)
-            self.convergence_history = [self.convergence_embedding.copy()]
-            self.convergence_step = 0
-
-            # Add initial embedding as first strip
-            initial_view = embedding_to_image(self.convergence_embedding, self.localization.interleaved_rgb)
-            self.canvas_state.convergence_visualization_strips.append(initial_view)
-
-        # Perform one update step
-        updated_embedding, converged = self.localization.hopfield_network.update_step(
-            self.convergence_embedding
-        )
-
-        self.convergence_step += 1
-        self.convergence_embedding = updated_embedding
-        self.convergence_history.append(updated_embedding.copy())
-
-        # Add updated embedding as a new strip
-        updated_view = embedding_to_image(updated_embedding, self.localization.interleaved_rgb)
-        self.canvas_state.convergence_visualization_strips.append(updated_view)
-
-        # Find which pattern this embedding is closest to
-        indices, weights = self.localization.hopfield_network.retrieve(updated_embedding, top_k=1)
-        best_match_idx = indices[0]
-        confidence = weights[0]
-
-        # Get the position of the best match
-        if best_match_idx < len(self.localization.sample_positions):
-            target_x, target_y, target_angle = self.localization.sample_positions[best_match_idx]
-            self.canvas_state.estimated_x = target_x
-            self.canvas_state.estimated_y = target_y
-            self.canvas_state.estimated_angle = target_angle
-            self.canvas_state.retrieved_sample_idx = best_match_idx
-
-        # Update display
-        self.update_map_display()
-
-        # Update status
-        change = np.linalg.norm(
-            updated_embedding - self.convergence_history[-2]) if len(self.convergence_history) > 1 else 0
-        self.status_label['text'] = f"⟳ Converging... Step {self.convergence_step}, Change: {change:.6f}, Confidence: {confidence*100:.1f}%"
-
-        # Check convergence
-        if converged or self.convergence_step > 100:
-            self.is_converging = False
-            self.converge_btn.config(text="Converge to Pattern")
-            if converged:
-                self.status_label[
-                    'text'] = f"✓ Converged in {self.convergence_step} steps! Position: ({target_x:.1f}, {target_y:.1f}), Confidence: {confidence*100:.1f}%"
-            else:
-                self.status_label['text'] = f"⚠️ Stopped after {self.convergence_step} iterations"
-
-            # Store the converged position and angle for visualization
-            self.canvas_state.converged_position = (target_x, target_y, target_angle)
-            self.update_map_display()
-
-            # Clean up
-            if hasattr(self, 'convergence_embedding'):
-                delattr(self, 'convergence_embedding')
 
     def clear_convergence(self):
         """Clear convergence visualization from the canvas but keep the final red circle"""
-        # Stop convergence if running
-        if self.is_converging:
-            self.is_converging = False
-            self.converge_btn.config(text="Converge to Pattern")
-
-        # Clear convergence strips but keep the converged position (red circle)
-        self.canvas_state.convergence_visualization_strips = []
-        self.convergence_step = 0
-        if hasattr(self, '_convergence_strip_images'):
-            self._convergence_strip_images = []
-        if hasattr(self, 'convergence_embedding'):
-            delattr(self, 'convergence_embedding')
+        self.convergence_controller.clear_convergence()
 
         # Update display to remove strips but keep red circle
         self.update_map_display()
