@@ -31,7 +31,7 @@ class CameraSimulator:
         """
         Capture a 1D strip of pixels from what the robot sees.
         Samples pixels along rays cast from the robot's viewing direction.
-        Walls appear less opaque (more white) the further they are from the robot.
+        Walls appear less opaque (darker) the further they are from the robot.
 
         Args:
             robot_x: Robot x position
@@ -69,9 +69,9 @@ class CameraSimulator:
             opacity = math.exp(-distance / max_distance * self.visibility_index)
 
             blended_color = (
-                int(color[0] * opacity + 255 * (1 - opacity)),
-                int(color[1] * opacity + 255 * (1 - opacity)),
-                int(color[2] * opacity + 255 * (1 - opacity))
+                int(color[0] * opacity),
+                int(color[1] * opacity),
+                int(color[2] * opacity)
             )
 
             camera_strip.append(blended_color)
