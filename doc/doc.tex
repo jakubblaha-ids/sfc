@@ -32,10 +32,11 @@ its approximate position from memory. The robot captures small visual patches
 known positions. These observations, along with their corresponding positions,
 are stored as patterns in the network's memory.
 
-When presented with a new observation, the network performs energy minimization
-to retrieve the most similar stored patterns. The robot's position is then
+The user is then able to move the robot on the map and new observations are
+generated in real time. When presented with a new observation, the network
+retrieves the most similar stored patterns. The robot's position is then
 estimated based on the top-k most similar observations, effectively localizing
-the robot by combining information from the best matching visual features. The
+the robot by combining information from the best matching stored patterns. The
 implementation provides an interactive visualization showing the map, the
 robot's movement, its field of view, and the real-time localization process.
 Users can configure network parameters such as temperature ($\beta$), number of
@@ -224,16 +225,31 @@ map on startup for convenience. Map images are stored and loaded as PNG files.
 \paragraph{Confidence heatmap} visualizes localization reliability across the entire map by computing
 prediction confidence at grid positions. For every cell in grid finer than the
 capture grid overlaying the map, the application captures an observation at
-that position, queries the MDN, and records the attention weight assigned to
-the best matching pattern. These attention weights, naturally represent the
-network's confidence in its prediction. The resulting confidence values are
-interpolated and displayed as a color-coded overlay, with warmer colors
-indicating high-confidence regions, and cooler colors showing areas where
-localization is uncertain.
+that position, queries the MHN, and records the attention weight assigned to
+the best matching pattern. These attention weights represent the network's
+confidence in its prediction. The resulting confidence values are interpolated
+and displayed as a color-coded overlay (warmer colors -- high-confidence
+regions).
 
 The heatmap can be computed and displayed for each angle separately (changing
 dynamically as the robot rotates), or averaged across all angles to show
 overall confidence independent of orientation.
+
+\paragraph{Energy heatmap} visualizes the Hopfield network's energy landscape across the map. For each
+grid position, the application computes the energy $E(\mathbf{x})$ of the
+observation at that location and angle using the Modern Hopfield Network energy
+function:
+
+\begin{equation}
+    E(\mathbf{x}) = -\log\left(\sum_{i=1}^{N} \exp(\beta \sqrt{D} \cdot \text{sim}_i)\right)
+\end{equation}
+
+where $\text{sim}_i$ is the cosine similarity between the query observation and
+the $i$-th stored pattern. Lower energy values indicate positions where the
+observation fits well into the network's stored memory, representing stable
+attractors in the energy landscape. The energy heatmap uses an inverted
+colormap where brighter (warmer) colors indicate lower energy and thus better
+matches.
 
 \paragraph{Map editor} allows the user to draw a map of their liking and use it inside the demo.
 

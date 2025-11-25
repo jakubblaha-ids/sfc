@@ -26,6 +26,7 @@ class ConfidenceAnalyzer:
 
         self.heatmap_grid_positions_by_angle = {}
         self.heatmap_grid_confidences_by_angle = {}
+        self.heatmap_grid_energies_by_angle = {}
         self.heatmap_computed = False
         self.heatmap_angles = []
 
@@ -70,7 +71,7 @@ class ConfidenceAnalyzer:
     def compute_confidence_heatmap(
             self, grid_positions_by_angle, localization_callback):
         """
-        Pre-compute confidence values at a dense grid of positions for each direction.
+        Pre-compute confidence and energy values at a dense grid of positions for each direction.
         Creates separate heatmaps for each angle.
 
         Args:
@@ -82,6 +83,7 @@ class ConfidenceAnalyzer:
         """
         self.heatmap_grid_positions_by_angle = {}
         self.heatmap_grid_confidences_by_angle = {}
+        self.heatmap_grid_energies_by_angle = {}
         self.heatmap_angles = []
 
         total_evaluations = 0
@@ -93,18 +95,22 @@ class ConfidenceAnalyzer:
         for angle, positions in grid_positions_by_angle.items():
             positions_for_angle = []
             confidences_for_angle = []
+            energies_for_angle = []
 
             for x, y in positions:
                 result = localization_callback(x, y, angle)
 
                 confidence = result['confidence'] if result else 0.0
+                energy = result['energy'] if result else 0.0
                 positions_for_angle.append((x, y))
                 confidences_for_angle.append(confidence)
+                energies_for_angle.append(energy)
 
                 evaluated_count += 1
 
             self.heatmap_grid_positions_by_angle[angle] = positions_for_angle
             self.heatmap_grid_confidences_by_angle[angle] = confidences_for_angle
+            self.heatmap_grid_energies_by_angle[angle] = energies_for_angle
             self.heatmap_angles.append(angle)
 
         self.heatmap_computed = True
@@ -177,6 +183,72 @@ class ConfidenceAnalyzer:
 
         return heatmap_image
 
+    def build_energy_heatmap(self, current_angle, average_all_angles=False,
+                             colormap='jet_r', sigma=20.0):
+        """
+        Build an energy heatmap for visualization.
+        Lower energy means better match (so we use inverted colormap by default).
+
+        Args:
+            current_angle: Current robot angle (used to find closest precomputed angle)
+            average_all_angles: If True, average across all angles
+            colormap: Matplotlib colormap name (default: 'jet_r' for inverted)
+            sigma: Gaussian blur sigma for smoothing
+
+        Returns:
+            PIL Image in RGBA mode, or None if no heatmap computed
+        """
+        if not self.heatmap_computed or not self.heatmap_angles:
+            return None
+
+        grid_stride = SAMPLE_STRIDE // 2
+        builder = HeatmapBuilder(
+            map_width=self.map_width,
+            map_height=self.map_height,
+            grid_stride=grid_stride,
+            resolution_scale=HEATMAP_RESOLUTION_SCALE
+        )
+
+        if average_all_angles:
+            heatmap_image = builder.build_averaged_heatmap(
+                grid_positions_by_angle=self.heatmap_grid_positions_by_angle,
+                grid_confidences_by_angle=self.heatmap_grid_energies_by_angle,
+                colormap_name=colormap,
+                sigma=sigma,
+                alpha_base=100,
+                alpha_scale=155,
+                threshold=None,  # Energy can be negative, so no threshold
+                invert_values=True  # Invert so low energy = high value (bright)
+            )
+        else:
+            closest_angle = self._find_closest_angle(current_angle)
+
+            if closest_angle is None:
+                return None
+
+            grid_positions = self.heatmap_grid_positions_by_angle.get(
+                closest_angle,
+                [])
+            grid_energies = self.heatmap_grid_energies_by_angle.get(
+                closest_angle,
+                [])
+
+            if not grid_positions or not grid_energies:
+                return None
+
+            heatmap_image = builder.build_heatmap(
+                grid_positions=grid_positions,
+                grid_confidences=grid_energies,
+                colormap_name=colormap,
+                sigma=sigma,
+                alpha_base=100,
+                alpha_scale=155,
+                threshold=None,  # Energy can be negative, so no threshold
+                invert_values=True  # Invert so low energy = high value (bright)
+            )
+
+        return heatmap_image
+
     def _find_closest_angle(self, current_angle):
         """
         Find the closest precomputed heatmap angle to the current angle.
@@ -213,5 +285,6 @@ class ConfidenceAnalyzer:
         self.test_positions = []
         self.heatmap_grid_positions_by_angle = {}
         self.heatmap_grid_confidences_by_angle = {}
+        self.heatmap_grid_energies_by_angle = {}
         self.heatmap_computed = False
         self.heatmap_angles = []

@@ -44,6 +44,12 @@ class CanvasState:
 
     # Confidence heatmap
     show_confidence_heatmap: bool = False
+    confidence_heatmap_image: Optional[Image.Image] = None
+
+    # Energy heatmap
+    show_energy_heatmap: bool = False
+    energy_heatmap_image: Optional[Image.Image] = None
+
     average_heatmap: bool = False
     heatmap_data: Optional[dict] = None
 

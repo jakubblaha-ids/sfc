@@ -46,8 +46,7 @@ class CanvasRenderer:
         return state.current_map_image
 
     def render(self, state: CanvasState, canvas: tk.Canvas,
-               camera_simulator=None, confidence_analyzer=None,
-               localization_engine=None):
+               camera_simulator=None, localization_engine=None):
         """
         Render the complete canvas based on the provided state.
 
@@ -55,7 +54,6 @@ class CanvasRenderer:
             state: CanvasState containing all rendering data
             canvas: tkinter Canvas to render to
             camera_simulator: Optional CameraSimulator for drawing viewing cone
-            confidence_analyzer: Optional ConfidenceAnalyzer for heatmap
             localization_engine: Optional LocalizationEngine for sample info
         """
         # Build the display image with all overlays
@@ -68,9 +66,11 @@ class CanvasRenderer:
             self._draw_viewing_cone_on_image(
                 display_image, state, camera_simulator)
 
-        if state.show_confidence_heatmap and confidence_analyzer:
-            self._draw_confidence_heatmap_on_image(
-                display_image, state, confidence_analyzer)
+        if state.show_confidence_heatmap and state.confidence_heatmap_image:
+            display_image.paste(state.confidence_heatmap_image, (0, 0), state.confidence_heatmap_image)
+
+        if state.show_energy_heatmap and state.energy_heatmap_image:
+            display_image.paste(state.energy_heatmap_image, (0, 0), state.energy_heatmap_image)
 
         # Scale and display the base image
         self._display_scaled_map_image(display_image, canvas, state)
@@ -149,19 +149,6 @@ class CanvasRenderer:
         draw.polygon(points, fill=cone_color, outline=None)
 
         image.paste(overlay, (0, 0), overlay)
-
-    def _draw_confidence_heatmap_on_image(self, image: Image.Image,
-                                          state: CanvasState, confidence_analyzer):
-        """Draw a smooth 2D color gradient heatmap"""
-        heatmap_image = confidence_analyzer.build_heatmap_image(
-            current_angle=state.robot_angle,
-            average_all_angles=state.average_heatmap,
-            colormap='jet',
-            sigma=20.0
-        )
-
-        if heatmap_image is not None:
-            image.paste(heatmap_image, (0, 0), heatmap_image)
 
     def _draw_sample_dots(self, canvas: tk.Canvas, state: CanvasState):
         """Draw red dots at sample positions on the canvas, sized by similarity"""

@@ -108,6 +108,9 @@ class LocalizationEngine:
             for idx, weight in zip(all_indices, all_weights):
                 self.sample_similarities[idx] = weight
 
+            # Compute energy for this query
+            energy = self.hopfield_network.get_energy(query_embedding)
+
             actual_top_k = min(top_k, len(all_indices))
             top_indices = all_indices[:actual_top_k]
             top_weights = all_weights[:actual_top_k]
@@ -154,6 +157,7 @@ class LocalizationEngine:
                 'y': y,
                 'angle': angle,
                 'confidence': float(best_weight),
+                'energy': float(energy),
                 'sample_idx': int(best_idx),
                 'top_k_matches': top_k_matches
             }

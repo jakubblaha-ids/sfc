@@ -82,6 +82,7 @@ class App:
 
         self.show_test_positions = tk.BooleanVar(value=False)
         self.show_confidence_heatmap = tk.BooleanVar(value=False)
+        self.show_energy_heatmap = tk.BooleanVar(value=False)
         self.average_heatmap = tk.BooleanVar(value=False)
 
         self.top_k = self._top_k
@@ -428,11 +429,18 @@ class App:
         self.show_test_positions_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
         self.show_confidence_heatmap_checkbox = ttk.Checkbutton(
-            stats_frame, text="Show confidence heatmap",
+            stats_frame, text="Show confidence heatmap (warmer = better)",
             variable=self.show_confidence_heatmap,
             command=self.on_show_confidence_heatmap_toggle
         )
         self.show_confidence_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
+
+        self.show_energy_heatmap_checkbox = ttk.Checkbutton(
+            stats_frame, text="Show energy heatmap (warmer = better)",
+            variable=self.show_energy_heatmap,
+            command=self.on_show_energy_heatmap_toggle
+        )
+        self.show_energy_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
         self.average_heatmap_checkbox = ttk.Checkbutton(
             stats_frame, text="Average heatmap across all angles",
@@ -473,6 +481,13 @@ class App:
     def on_show_confidence_heatmap_toggle(self):
         """Handle checkbox toggle for showing confidence heatmap"""
         if self.show_confidence_heatmap.get():
+            if not self.confidence.heatmap_computed:
+                self.compute_confidence_heatmap()
+        self.update_map_display()
+
+    def on_show_energy_heatmap_toggle(self):
+        """Handle checkbox toggle for showing energy heatmap"""
+        if self.show_energy_heatmap.get():
             if not self.confidence.heatmap_computed:
                 self.compute_confidence_heatmap()
         self.update_map_display()
@@ -929,17 +944,34 @@ class App:
         self.canvas_state.apply_noise = self.apply_noise.get()
         self.canvas_state.show_test_positions = self.show_test_positions.get()
         self.canvas_state.show_confidence_heatmap = self.show_confidence_heatmap.get()
+        self.canvas_state.show_energy_heatmap = self.show_energy_heatmap.get()
         self.canvas_state.average_heatmap = self.average_heatmap.get()
         self.canvas_state.sample_positions = self.localization.sample_positions.copy() if self.localization.sample_positions else []
         self.canvas_state.sample_similarities = self.localization.sample_similarities
         self.canvas_state.test_positions = self.confidence.test_positions.copy() if self.confidence.test_positions else []
+
+        # Generate heatmap images if needed
+        if self.canvas_state.show_confidence_heatmap and self.confidence.heatmap_computed:
+            self.canvas_state.confidence_heatmap_image = self.confidence.build_heatmap_image(
+                current_angle=self.robot.angle,
+                average_all_angles=self.canvas_state.average_heatmap,
+                colormap='jet',
+                sigma=20.0
+            )
+
+        if self.canvas_state.show_energy_heatmap and self.confidence.heatmap_computed:
+            self.canvas_state.energy_heatmap_image = self.confidence.build_energy_heatmap(
+                current_angle=self.robot.angle,
+                average_all_angles=self.canvas_state.average_heatmap,
+                colormap='jet_r',
+                sigma=20.0
+            )
 
         # Render
         self.renderer.render(
             self.canvas_state,
             self.map_canvas,
             camera_simulator=self.camera,
-            confidence_analyzer=self.confidence,
             localization_engine=self.localization
         )
 

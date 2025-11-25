@@ -5,6 +5,7 @@ Crucial:
 -   plot of energy function during convergence
 -   image in doc
 -   confidence using energy
+-   add how confidence is computed into doc
 
 Nice to have:
 

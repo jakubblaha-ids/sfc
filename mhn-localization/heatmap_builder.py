@@ -38,7 +38,8 @@ class HeatmapBuilder:
         sigma=10.0,
         alpha_base=100,
         alpha_scale=155,
-        threshold=0.001
+        threshold=0.001,
+        invert_values=False
     ):
         """
         Build a heatmap image from grid positions and confidence values.
@@ -51,6 +52,7 @@ class HeatmapBuilder:
             alpha_base: Base alpha value for transparency (default: 100)
             alpha_scale: Additional alpha scaling factor (default: 155)
             threshold: Minimum confidence threshold for visibility (default: 0.001)
+            invert_values: If True, invert the values (for energy: low = good)
 
         Returns:
             PIL Image in RGBA mode, or None if no data
@@ -58,8 +60,22 @@ class HeatmapBuilder:
         if not grid_positions or not grid_confidences:
             return None
 
-        # Get max confidence for normalization
-        max_confidence = max(grid_confidences) if grid_confidences else 1.0
+        # For energy values, we need to handle potentially negative values
+        if invert_values:
+            # Find min and max for normalization
+            min_val = min(grid_confidences)
+            max_val = max(grid_confidences)
+            # Invert: low values become high, high values become low
+            # Then normalize to 0-1 range
+            if max_val != min_val:
+                grid_confidences = [(max_val - val) / (max_val - min_val)
+                                    for val in grid_confidences]
+            else:
+                grid_confidences = [0.5 for _ in grid_confidences]
+            max_confidence = 1.0
+        else:
+            # Get max confidence for normalization
+            max_confidence = max(grid_confidences) if grid_confidences else 1.0
 
         # Use scipy's griddata for smooth interpolation at lower resolution
         confidence_grid = self._populate_grid_interpolated(
@@ -96,7 +112,8 @@ class HeatmapBuilder:
         sigma=10.0,
         alpha_base=100,
         alpha_scale=155,
-        threshold=0.001
+        threshold=0.001,
+        invert_values=False
     ):
         """
         Build an averaged heatmap across all angles.
@@ -109,6 +126,7 @@ class HeatmapBuilder:
             alpha_base: Base alpha value for transparency (default: 100)
             alpha_scale: Additional alpha scaling factor (default: 155)
             threshold: Minimum confidence threshold for visibility (default: 0.001)
+            invert_values: If True, invert the values (for energy: low = good)
 
         Returns:
             PIL Image in RGBA mode, or None if no data
@@ -126,7 +144,8 @@ class HeatmapBuilder:
             sigma,
             alpha_base,
             alpha_scale,
-            threshold
+            threshold,
+            invert_values
         )
 
     def _compute_averaged_data(
@@ -227,7 +246,10 @@ class HeatmapBuilder:
 
         # Adjust alpha channel based on confidence values
         # Make it more visible with higher base alpha and stronger scaling
-        mask = smoothed_grid > threshold
+        if threshold is not None:
+            mask = smoothed_grid > threshold
+        else:
+            mask = smoothed_grid > 0.0
         # Base alpha + scaled alpha based on confidence
         alpha_values = np.clip(
             alpha_base + smoothed_grid * alpha_scale, 0, 255
