@@ -25,6 +25,26 @@ class CanvasRenderer:
         """Set the robot image for rendering"""
         self.robot_image = robot_image
 
+    def update_map_with_noise(self, state: CanvasState):
+        """Create a cached map with noise applied for raytracing"""
+        if state.apply_noise and len(state.noise_circles) > 0:
+            state.map_with_noise = state.current_map_image.copy()
+            draw = ImageDraw.Draw(state.map_with_noise)
+            for x, y, radius in state.noise_circles:
+                draw.ellipse(
+                    [x - radius, y - radius, x + radius, y + radius],
+                    fill='black',
+                    outline='black'
+                )
+        else:
+            state.map_with_noise = None
+
+    def get_map_for_raytracing(self, state: CanvasState) -> Image.Image:
+        """Get the appropriate map for raytracing (with or without noise)"""
+        if state.map_with_noise is not None:
+            return state.map_with_noise
+        return state.current_map_image
+
     def render(self, state: CanvasState, canvas: tk.Canvas,
                camera_simulator=None, confidence_analyzer=None,
                localization_engine=None):

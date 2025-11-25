@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 from .constants import *
 from .constants import DEFAULT_NUM_ANGLES, CAMERA_NUM_RAYS
-from PIL import Image, ImageTk, ImageDraw
+from PIL import Image, ImageTk
 from .editor import MapEditor
 from .config import ConfigManager
 from .robot_state import RobotState
@@ -102,6 +102,10 @@ class App:
         self.create_right_panel()
 
         self.load_last_map()
+
+        # Generate noise circles on startup if noise is enabled
+        if self._apply_noise:
+            self.generate_noise_circles()
 
         self.root.bind('<KeyPress-w>', lambda e: self.on_key_press('w'))
         self.root.bind('<KeyRelease-w>', lambda e: self.on_key_release('w'))
@@ -568,6 +572,7 @@ class App:
     def on_apply_noise_toggle(self):
         """Handle apply noise checkbox toggle"""
         self.config.set("apply_noise", self.apply_noise.get())
+        self.canvas_state.apply_noise = self.apply_noise.get()
         if self.apply_noise.get():
             self.generate_noise_circles()
         else:
@@ -575,7 +580,7 @@ class App:
         self.update_map_display()
 
     def generate_noise_circles(self):
-        """Generate random circles for noise based on noise_amount and create cached map"""
+        """Generate random circles for noise based on noise_amount"""
         import random
 
         self.canvas_state.noise_circles = []
@@ -586,27 +591,11 @@ class App:
             radius = random.randint(3, 15)
             self.canvas_state.noise_circles.append((x, y, radius))
 
-        self.update_map_with_noise()
-
-    def update_map_with_noise(self):
-        """Create a cached map with noise applied for raytracing"""
-        if self.apply_noise.get() and len(self.canvas_state.noise_circles) > 0:
-            self.canvas_state.map_with_noise = self.canvas_state.current_map_image.copy()
-            draw = ImageDraw.Draw(self.canvas_state.map_with_noise)
-            for x, y, radius in self.canvas_state.noise_circles:
-                draw.ellipse(
-                    [x - radius, y - radius, x + radius, y + radius],
-                    fill='black',
-                    outline='black'
-                )
-        else:
-            self.canvas_state.map_with_noise = None
+        self.renderer.update_map_with_noise(self.canvas_state)
 
     def get_map_for_raytracing(self):
         """Get the appropriate map for raytracing (with or without noise)"""
-        if self.canvas_state.map_with_noise is not None:
-            return self.canvas_state.map_with_noise
-        return self.canvas_state.current_map_image
+        return self.renderer.get_map_for_raytracing(self.canvas_state)
 
     def compute_confidence_heatmap(self):
         """
@@ -639,7 +628,7 @@ class App:
     def on_map_saved(self, new_map_image):
         self.canvas_state.current_map_image = new_map_image
         if self.apply_noise.get():
-            self.update_map_with_noise()
+            self.renderer.update_map_with_noise(self.canvas_state)
         self.update_map_display()
 
     def load_robot_image(self):
@@ -709,7 +698,7 @@ class App:
 
                 self.canvas_state.current_map_image = imported_image
                 if self.apply_noise.get():
-                    self.update_map_with_noise()
+                    self.renderer.update_map_with_noise(self.canvas_state)
                 self.update_map_display()
 
                 self.config.set_last_map_path(file_path)
@@ -937,6 +926,7 @@ class App:
         self.canvas_state.robot_angle = self.robot.angle
 
         # Sync other dynamic state
+        self.canvas_state.apply_noise = self.apply_noise.get()
         self.canvas_state.show_test_positions = self.show_test_positions.get()
         self.canvas_state.show_confidence_heatmap = self.show_confidence_heatmap.get()
         self.canvas_state.average_heatmap = self.average_heatmap.get()
