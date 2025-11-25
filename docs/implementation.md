@@ -70,9 +70,3 @@ The `SamplingEngine` generates deterministic grid-based sampling positions. For 
 **Test Positions**: For confidence analysis, a denser grid (half the training stride) is used, providing more evaluation points without requiring full retraining.
 
 **Heatmap Positions**: Separate from training samples, used for confidence visualization across the entire map at multiple angles.
-
-## Data Persistence
-
-Configuration parameters are stored in JSON format (`tmp/sfc_config.json`). This includes user-adjusted parameters (beta, blur, FOV, etc.) and the last used map path for automatic loading on startup. The map image itself is saved/loaded as PNG.
-
-Patterns can optionally be saved to `patterns.npy` (NumPy binary format) for faster loading, avoiding repeated sampling.
