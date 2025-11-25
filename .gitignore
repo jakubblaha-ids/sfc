@@ -3,6 +3,7 @@ patterns.npy
 .vscode/
 tmp/
 .DS_Store
+9-xblaha36.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
