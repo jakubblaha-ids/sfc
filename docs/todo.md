@@ -1,9 +1,7 @@
 Crucial:
--   noise to docs
 -   why normalization
 -   maybe change angle averaging?
 -   energy heatmap
--   convergence mode
 -   plot of energy function during convergence
 
 Nice to have:
@@ -23,3 +21,5 @@ Done:
 -   pattern dimension
 -   which angle is shown when hovering?
 -   average confidence into docs
+-   noise to docs
+-   convergence mode

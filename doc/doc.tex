@@ -200,7 +200,7 @@ Configuration parameters are stored in JSON format in
 settings between sessions. The application automatically loads the last used
 map on startup for convenience. Map images are stored and loaded as PNG files.
 
-\subsection{Extra features}
+\subsection{Additional features}
 
 \paragraph{Confidence heatmap} visualizes localization reliability across the entire map by computing
 prediction confidence at grid positions. For every cell in grid finer than the
@@ -217,6 +217,14 @@ robot rotates), or averaged across all angles to show overall confidence
 independent of orientation.
 
 \paragraph{Map editor} allows the user to draw a map of their liking and use it inside the demo.
+
+\paragraph{Noise generator} allows for adding random noise to the map by inserting black dots at various
+locations, demonstrating that the network can still localize the robot even if
+a part of the camera view is occupied.
+
+\paragraph{Convegence} the program demonstrates the convergence to the most similar vector by
+gradually updating the state using the MHN update rule and displaying the state
+obtained in different iterations on the screen.
 
 \section{Running the Program}
 
