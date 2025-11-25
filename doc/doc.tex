@@ -84,26 +84,47 @@ class using the continuous energy formulation. Patterns are stored as an $N
 \times D$ matrix where $N$ is the number of patterns and $D$ is the embedding
 dimension.
 
-The network uses the energy function
-\begin{equation}
-    E(x) = -\log\left(\sum_i \exp(\beta \cdot x^T \cdot \xi_i)\right)
-\end{equation}
-where $x$ is the query pattern, $\xi_i$ are stored patterns (normalized for
-cosine similarity), and $\beta$ is the inverse temperature parameter.
-
 During training, patterns are stored directly in memory and normalized for
 cosine similarity computation. The L2 norm is computed for each pattern vector,
 avoiding division by zero with a minimum threshold.
 
 Given a query pattern, the network computes cosine similarities with all stored
 patterns, scales them by $\beta \cdot \sqrt{D}$ for numerical stability, and
-applies softmax to obtain attention weights. The top-k patterns with highest
-attention weights are returned along with their weights for position
-estimation.
+applies softmax to obtain attention weights. It uses cosine similarity as
+oposed to a dot product to make the predictions invariant to the brightness of
+the camera view. The top-k patterns with highest attention weights are returned
+along with their weights for position estimation.
 
 The temperature parameter ($\beta$) controls retrieval selectivity. Higher
 values make the network focus sharply on the best match. Lower values allow
-broader consideration of similar patterns.
+broader consideration of similar patterns and allow more vectors to influence
+the final position prediction.
+
+The network uses an iterative update rule to converge to the nearest stored
+pattern when simulating convergence. Given a query state $\mathbf{x}^{(t)}$ at
+iteration $t$ and a memory matrix $\mathbf{M} \in \mathbb{R}^{N \times D}$
+containing $N$ stored patterns of dimension $D$, the update is:
+
+\begin{equation}
+    \mathbf{x}^{(t+1)} = \sum_{i=1}^{N} \alpha_i^{(t)} \mathbf{m}_i
+\end{equation}
+
+where the attention weights $\alpha_i^{(t)}$ are computed using softmax over
+scaled cosine similarities:
+
+\begin{equation}
+    \alpha_i^{(t)} = \frac{\exp(\beta \sqrt{D} \cdot \text{sim}_i^{(t)})}{\sum_{j=1}^{N} \exp(\beta \sqrt{D} \cdot \text{sim}_j^{(t)})}
+\end{equation}
+
+and the cosine similarity between the normalized query and each stored pattern
+is:
+
+\begin{equation}
+    \text{sim}_i^{(t)} = \frac{\mathbf{x}^{(t)}}{\|\mathbf{x}^{(t)}\|_2} \cdot \frac{\mathbf{m}_i}{\|\mathbf{m}_i\|_2}
+\end{equation}
+
+Convergence is reached when $\|\mathbf{x}^{(t+1)} - \mathbf{x}^{(t)}\|_2 <
+\epsilon$ for a small threshold $\epsilon = 10^{-6}$.
 
 \subsection{Observation capturing}
 

@@ -1,4 +1,5 @@
 Crucial:
+-   white to black
 -   why normalization
 -   maybe change angle averaging?
 -   energy heatmap
