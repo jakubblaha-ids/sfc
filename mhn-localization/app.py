@@ -10,6 +10,8 @@ from .camera import CameraSimulator
 from .localization_engine import LocalizationEngine
 from .sampling_engine import SamplingEngine
 from .confidence_analyzer import ConfidenceAnalyzer
+from .canvas_state import CanvasState
+from .canvas_renderer import CanvasRenderer
 import math
 import os
 import numpy as np
@@ -51,41 +53,38 @@ class App:
         self.sampling = SamplingEngine(num_rotations=self._num_angles)
         self.confidence = ConfidenceAnalyzer(MAP_WIDTH, MAP_HEIGHT)
 
+        # Canvas renderer
+        self.renderer = CanvasRenderer()
+
+        # Canvas state - single source of truth for all rendering state
+        self.canvas_state = CanvasState(
+            current_map_image=Image.new("RGB", (MAP_WIDTH, MAP_HEIGHT), "white"),
+            robot_x=self.robot.x,
+            robot_y=self.robot.y,
+            robot_angle=self.robot.angle,
+            robot_radius=self.robot.radius,
+            apply_noise=self._apply_noise,
+            camera_fov=self._fov,
+            camera_cone_length=40,
+        )
+
         # UI-related state
         self.robot_image = None
-        self.tk_robot_image = None
         self.load_robot_image()
-
-        self.current_map_image = Image.new(
-            "RGB", (MAP_WIDTH, MAP_HEIGHT), "white")
-        self.map_with_noise = None
-        self.tk_map_image = None
 
         self.interleaved_rgb = tk.BooleanVar(value=self._interleaved_rgb)
 
         self.noise_amount = self._noise_amount
         self.apply_noise = tk.BooleanVar(value=self._apply_noise)
-        self.noise_circles = []
 
         self.current_camera_view = None
 
-        self.sample_dots = []
-
-        self.estimated_x = None
-        self.estimated_y = None
-        self.estimated_angle = None
-        self.retrieved_sample_idx = None
-        self.top_k_matches = []
-
-        self.test_position_dots = []
         self.show_test_positions = tk.BooleanVar(value=False)
-
         self.show_confidence_heatmap = tk.BooleanVar(value=False)
         self.average_heatmap = tk.BooleanVar(value=False)
 
         self.top_k = self._top_k
 
-        self.hovered_sample_idx = None
         self._hovered_strip_images = []
 
         self.keys_pressed = set()
@@ -93,14 +92,8 @@ class App:
 
         self.rotation_keys_pressed = set()
 
-        self.map_scale_factor = 1.0
-        self.map_offset_x = 0
-        self.map_offset_y = 0
-
         self.is_converging = False
         self.convergence_step = 0
-        self.convergence_visualization_strips = []
-        self.converged_position = None
 
         self.create_layout()
         self.create_toolbar()
@@ -577,36 +570,42 @@ class App:
         if self.apply_noise.get():
             self.generate_noise_circles()
         else:
-            self.map_with_noise = None
+            self.canvas_state.map_with_noise = None
         self.update_map_display()
 
     def generate_noise_circles(self):
         """Generate random circles for noise based on noise_amount and create cached map"""
         import random
 
-        self.noise_circles = []
+        self.canvas_state.noise_circles = []
 
         for _ in range(self.noise_amount):
             x = random.randint(0, MAP_WIDTH)
             y = random.randint(0, MAP_HEIGHT)
             radius = random.randint(3, 15)
-            self.noise_circles.append((x, y, radius))
+            self.canvas_state.noise_circles.append((x, y, radius))
 
         self.update_map_with_noise()
 
     def update_map_with_noise(self):
         """Create a cached map with noise applied for raytracing"""
-        if self.apply_noise.get() and len(self.noise_circles) > 0:
-            self.map_with_noise = self.current_map_image.copy()
-            self.draw_noise_circles_on_image(self.map_with_noise)
+        if self.apply_noise.get() and len(self.canvas_state.noise_circles) > 0:
+            self.canvas_state.map_with_noise = self.canvas_state.current_map_image.copy()
+            draw = ImageDraw.Draw(self.canvas_state.map_with_noise)
+            for x, y, radius in self.canvas_state.noise_circles:
+                draw.ellipse(
+                    [x - radius, y - radius, x + radius, y + radius],
+                    fill='black',
+                    outline='black'
+                )
         else:
-            self.map_with_noise = None
+            self.canvas_state.map_with_noise = None
 
     def get_map_for_raytracing(self):
         """Get the appropriate map for raytracing (with or without noise)"""
-        if self.map_with_noise is not None:
-            return self.map_with_noise
-        return self.current_map_image
+        if self.canvas_state.map_with_noise is not None:
+            return self.canvas_state.map_with_noise
+        return self.canvas_state.current_map_image
 
     def compute_confidence_heatmap(self):
         """
@@ -634,10 +633,10 @@ class App:
                 len(result['angles'])}  angles."
 
     def open_map_editor(self):
-        MapEditor(self.root, self.current_map_image, self.on_map_saved)
+        MapEditor(self.root, self.canvas_state.current_map_image, self.on_map_saved)
 
     def on_map_saved(self, new_map_image):
-        self.current_map_image = new_map_image
+        self.canvas_state.current_map_image = new_map_image
         if self.apply_noise.get():
             self.update_map_with_noise()
         self.update_map_display()
@@ -650,6 +649,7 @@ class App:
             self.robot_image = Image.open(robot_image_path)
             if self.robot_image.mode != "RGBA":
                 self.robot_image = self.robot_image.convert("RGBA")
+            self.renderer.set_robot_image(self.robot_image)
             print(f"Loaded robot image: {robot_image_path}")
         except Exception as e:
             print(f"Failed to load robot image: {e}")
@@ -672,7 +672,7 @@ class App:
                 if imported_image.mode != "RGB":
                     imported_image = imported_image.convert("RGB")
 
-                self.current_map_image = imported_image
+                self.canvas_state.current_map_image = imported_image
                 print(f"Loaded last map: {last_path}")
 
             except Exception as e:
@@ -706,7 +706,7 @@ class App:
                 if imported_image.mode != "RGB":
                     imported_image = imported_image.convert("RGB")
 
-                self.current_map_image = imported_image
+                self.canvas_state.current_map_image = imported_image
                 if self.apply_noise.get():
                     self.update_map_with_noise()
                 self.update_map_display()
@@ -741,7 +741,7 @@ class App:
 
         if file_path:
             try:
-                self.current_map_image.save(file_path)
+                self.canvas_state.current_map_image.save(file_path)
 
                 self.config.set_last_map_path(file_path)
 
@@ -773,7 +773,6 @@ class App:
             show_message: Whether to show success message (default True)
         """
         self.localization.clear_samples()
-        self.clear_sample_dots()
 
         sample_positions = self.sampling.generate_sample_positions()
         total_samples = len(sample_positions)
@@ -791,7 +790,6 @@ class App:
         self.robot.restore_state(original_state)
 
         self.update_map_display()
-        self.draw_sample_dots()
 
         self.status_label['text'] = ""
 
@@ -871,114 +869,17 @@ class App:
             self.stats_label.config(
                 text="Train the network to see confidence statistics")
 
-    def clear_sample_dots(self):
-        """Remove all sample dots from the canvas"""
-        for dot_id in self.sample_dots:
-            self.map_canvas.delete(dot_id)
-        self.sample_dots = []
-
-    def draw_sample_dots(self):
-        """Draw red dots at sample positions on the canvas, sized by similarity"""
-        self.clear_sample_dots()
-
-        sample_similarities = self.localization.sample_similarities
-        max_similarity = None
-        if sample_similarities is not None and len(sample_similarities) > 0:
-            max_similarity = max(sample_similarities.max(), 1e-6)
-
-        for i, (x, y, _angle) in enumerate(self.localization.sample_positions):
-            if sample_similarities is not None and i < len(sample_similarities):
-                similarity = sample_similarities[i]
-                min_radius = 1
-                max_radius = 5
-
-                normalized_similarity = similarity / max_similarity
-                dot_radius = min_radius + (
-                    max_radius - min_radius) * normalized_similarity
-            else:
-                dot_radius = SAMPLE_DOT_RADIUS
-
-            canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
-            scaled_radius = dot_radius * self.map_scale_factor
-
-            dot_id = self.map_canvas.create_rectangle(
-                canvas_x - scaled_radius,
-                canvas_y - scaled_radius,
-                canvas_x + scaled_radius,
-                canvas_y + scaled_radius,
-                fill=COLOR_SAMPLE_DOT,
-                outline=COLOR_SAMPLE_DOT,
-                tags=("sample_dot", f"sample_{i}")
-            )
-            self.sample_dots.append(dot_id)
-
-    def clear_test_position_dots(self):
-        """Remove all test position dots from the canvas"""
-        for dot_id in self.test_position_dots:
-            self.map_canvas.delete(dot_id)
-        self.test_position_dots = []
-
-    def draw_test_position_dots(self):
-        """Draw blue squares at test positions on the canvas"""
-        self.clear_test_position_dots()
-
-        if not self.show_test_positions.get():
-            return
-
-        dot_radius = 2
-
-        for x, y in self.confidence.test_positions:
-            canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
-            scaled_radius = dot_radius * self.map_scale_factor
-
-            dot_id = self.map_canvas.create_rectangle(
-                canvas_x - scaled_radius,
-                canvas_y - scaled_radius,
-                canvas_x + scaled_radius,
-                canvas_y + scaled_radius,
-                fill="#0000FF",
-                outline="#0000FF",
-                tags="test_position_dot"
-            )
-            self.test_position_dots.append(dot_id)
-
-    def draw_top_k_interpolation_lines(self):
-        """Draw black lines from top k matches to the final predicted position"""
-        if not self.top_k_matches or self.estimated_x is None or self.estimated_y is None:
-            return
-
-        canvas_est_x, canvas_est_y = self.image_to_canvas_coords(
-            self.estimated_x, self.estimated_y)
-
-        for match in self.top_k_matches:
-            match_x = match['x']
-            match_y = match['y']
-            canvas_match_x, canvas_match_y = self.image_to_canvas_coords(
-                match_x, match_y)
-
-            self.map_canvas.create_line(
-                canvas_match_x, canvas_match_y,
-                canvas_est_x, canvas_est_y,
-                fill="#000000",
-                width=max(1, int(1 * self.map_scale_factor)),
-                tags="top_k_line"
-            )
-
     def on_map_canvas_resize(self, event):
         """Handle map canvas resize and update display"""
         self.update_map_display()
 
     def canvas_to_image_coords(self, canvas_x, canvas_y):
         """Convert canvas coordinates to image coordinates"""
-        img_x = (canvas_x - self.map_offset_x) / self.map_scale_factor
-        img_y = (canvas_y - self.map_offset_y) / self.map_scale_factor
-        return img_x, img_y
+        return self.canvas_state.canvas_to_image_coords(canvas_x, canvas_y)
 
     def image_to_canvas_coords(self, img_x, img_y):
         """Convert image coordinates to canvas coordinates"""
-        canvas_x = img_x * self.map_scale_factor + self.map_offset_x
-        canvas_y = img_y * self.map_scale_factor + self.map_offset_y
-        return canvas_x, canvas_y
+        return self.canvas_state.image_to_canvas_coords(img_x, img_y)
 
     def on_canvas_hover(self, event):
         """
@@ -1014,8 +915,8 @@ class App:
                 min_distance = distance
                 closest_idx = i
 
-        if closest_idx != self.hovered_sample_idx:
-            self.hovered_sample_idx = closest_idx
+        if closest_idx != self.canvas_state.hovered_sample_idx:
+            self.canvas_state.hovered_sample_idx = closest_idx
 
             # Clear stored hover images
             if hasattr(self, '_hovered_strip_images'):
@@ -1029,247 +930,35 @@ class App:
                 self.memory_frame.config(text="Retrieved Memory")
                 self.update_map_display()
 
-    def _display_scaled_map_image(self, display_image):
-        """Scale and display the map image to fit canvas width while maintaining aspect ratio"""
-        canvas_width = self.map_canvas.winfo_width()
-        canvas_height = self.map_canvas.winfo_height()
-
-        if canvas_width <= 1 or canvas_height <= 1:
-            self.tk_map_image = ImageTk.PhotoImage(display_image)
-            self.map_canvas.delete("all")
-            self.map_canvas.create_image(
-                0, 0, image=self.tk_map_image, anchor="nw")
-            return
-
-        img_width, img_height = display_image.size
-        width_scale = canvas_width / img_width
-        height_scale = canvas_height / img_height
-
-        self.map_scale_factor = min(width_scale, height_scale)
-
-        new_width = int(img_width * self.map_scale_factor)
-        new_height = int(img_height * self.map_scale_factor)
-
-        self.map_offset_x = (canvas_width - new_width) / 2
-        self.map_offset_y = (canvas_height - new_height) / 2
-
-        scaled_image = display_image.resize(
-            (new_width, new_height),
-            Image.Resampling.LANCZOS)
-        self.tk_map_image = ImageTk.PhotoImage(scaled_image)
-
-        self.map_canvas.delete("all")
-        self.map_canvas.create_image(
-            self.map_offset_x, self.map_offset_y, image=self.tk_map_image,
-            anchor="nw")
-
     def update_map_display(self):
-        display_image = self.current_map_image.copy()
-
-        if self.apply_noise.get():
-            self.draw_noise_circles_on_image(display_image)
-
-        self.draw_viewing_cone_on_image(display_image)
-
-        if self.show_confidence_heatmap.get():
-            self.draw_confidence_heatmap_on_image(display_image)
-
-        self._display_scaled_map_image(display_image)
-
+        """Update the map canvas display using the renderer."""
         self.capture_camera_view()
         self.display_camera_view()
 
         if self.localization.is_trained:
             self.localize()
 
-        self.draw_sample_dots()
+        # Sync robot state to canvas_state
+        self.canvas_state.robot_x = self.robot.x
+        self.canvas_state.robot_y = self.robot.y
+        self.canvas_state.robot_angle = self.robot.angle
 
-        self.draw_test_position_dots()
+        # Sync other dynamic state
+        self.canvas_state.show_test_positions = self.show_test_positions.get()
+        self.canvas_state.show_confidence_heatmap = self.show_confidence_heatmap.get()
+        self.canvas_state.average_heatmap = self.average_heatmap.get()
+        self.canvas_state.sample_positions = self.localization.sample_positions.copy() if self.localization.sample_positions else []
+        self.canvas_state.sample_similarities = self.localization.sample_similarities
+        self.canvas_state.test_positions = self.confidence.test_positions.copy() if self.confidence.test_positions else []
 
-        self.draw_top_k_interpolation_lines()
-
-        self.draw_converged_pattern_highlight()
-
-        self.draw_convergence_path()
-
-        self.draw_robot()
-
-        self.draw_hovered_sample_visualization()
-
-    def draw_hovered_sample_visualization(self):
-        """Draw visualization of all directions for the hovered sample position"""
-        if self.hovered_sample_idx is None:
-            return
-
-        sample_info = self.localization.get_sample_info(self.hovered_sample_idx)
-        if not sample_info:
-            return
-
-        x, y = sample_info['x'], sample_info['y']
-
-        # Highlight the hovered position on the map
-        canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
-        highlight_radius = 10 * self.map_scale_factor
-
-        self.map_canvas.create_oval(
-            canvas_x - highlight_radius,
-            canvas_y - highlight_radius,
-            canvas_x + highlight_radius,
-            canvas_y + highlight_radius,
-            outline="#FFFF00",
-            width=max(2, int(2 * self.map_scale_factor)),
-            tags="hovered_highlight"
+        # Render
+        self.renderer.render(
+            self.canvas_state,
+            self.map_canvas,
+            camera_simulator=self.camera,
+            confidence_analyzer=self.confidence,
+            localization_engine=self.localization
         )
-
-        # Get all samples at this position
-        samples_at_pos = self.localization.get_samples_at_position(x, y)
-
-        if not samples_at_pos:
-            return
-
-        # Draw all direction samples in top-left corner
-        strip_height = 15
-        margin = 10
-        start_x = margin
-        start_y = margin
-
-        for i, sample in enumerate(samples_at_pos):
-            view = sample['view']
-            angle = sample['angle']
-
-            # Get the width from the camera view
-            view_width = view.size[0]
-
-            # Resize to bigger height
-            resized_view = view.resize(
-                (view_width, strip_height),
-                Image.Resampling.NEAREST
-            )
-
-            # Convert to PhotoImage
-            tk_view = ImageTk.PhotoImage(resized_view)
-
-            # Draw on canvas
-            y_pos = start_y + i * (strip_height + 2)
-            self.map_canvas.create_image(
-                start_x, y_pos,
-                image=tk_view,
-                anchor="nw",
-                tags="hovered_direction_strip"
-            )
-
-            # Store reference to prevent garbage collection
-            if not hasattr(self, '_hovered_strip_images'):
-                self._hovered_strip_images = []
-            self._hovered_strip_images.append(tk_view)
-
-            # Draw angle label next to the strip
-            label_x = start_x + view_width + 5
-            self.map_canvas.create_text(
-                label_x, y_pos + strip_height // 2,
-                text=f"{angle:.0f}°",
-                fill="#FF0000",
-                anchor="w",
-                font=("Arial", 10),
-                tags="hovered_direction_label"
-            )
-
-    def draw_robot(self):
-        canvas_robot_x, canvas_robot_y = self.image_to_canvas_coords(
-            self.robot.x, self.robot.y)
-        scaled_radius = self.robot.radius * self.map_scale_factor
-
-        if self.robot_image is not None:
-            rotated_image = self.robot_image.rotate(
-                -self.robot.angle, expand=True)
-
-            robot_size = int(50 * self.map_scale_factor)
-            rotated_image = rotated_image.resize(
-                (robot_size, robot_size),
-                Image.Resampling.LANCZOS)
-
-            self.tk_robot_image = ImageTk.PhotoImage(rotated_image)
-
-            self.map_canvas.create_image(
-                canvas_robot_x, canvas_robot_y,
-                image=self.tk_robot_image,
-                anchor="center",
-                tags="robot"
-            )
-        else:
-            self.map_canvas.create_oval(
-                canvas_robot_x - scaled_radius,
-                canvas_robot_y - scaled_radius,
-                canvas_robot_x + scaled_radius,
-                canvas_robot_y + scaled_radius,
-                fill=COLOR_ROBOT_GT,
-                outline=COLOR_ROBOT_GT,
-                tags="robot"
-            )
-
-        if self.estimated_x is not None and self.estimated_y is not None:
-            canvas_est_x, canvas_est_y = self.image_to_canvas_coords(
-                self.estimated_x, self.estimated_y)
-
-            if self.estimated_angle is not None:
-                line_length = 20 * self.map_scale_factor
-                angle_rad = math.radians(self.estimated_angle)
-                end_x = canvas_est_x + line_length * math.cos(angle_rad)
-                end_y = canvas_est_y + line_length * math.sin(angle_rad)
-                self.map_canvas.create_line(
-                    canvas_est_x, canvas_est_y,
-                    end_x, end_y,
-                    fill="#800080",
-                    width=max(2, int(2 * self.map_scale_factor)),
-                    tags="estimated_direction"
-                )
-
-            self.map_canvas.create_oval(
-                canvas_est_x - scaled_radius,
-                canvas_est_y - scaled_radius,
-                canvas_est_x + scaled_radius,
-                canvas_est_y + scaled_radius,
-                fill="#00FF00",
-                outline="#00FF00",
-                tags="estimated"
-            )
-
-    def draw_confidence_heatmap_on_image(self, image):
-        """Draw a smooth 2D color gradient heatmap using ConfidenceAnalyzer"""
-        heatmap_image = self.confidence.build_heatmap_image(
-            current_angle=self.robot.angle,
-            average_all_angles=self.average_heatmap.get(),
-            colormap='jet',
-            sigma=20.0
-        )
-
-        if heatmap_image is not None:
-            image.paste(heatmap_image, (0, 0), heatmap_image)
-
-    def draw_noise_circles_on_image(self, image):
-        """Draw random noise circles on the image"""
-        draw = ImageDraw.Draw(image)
-
-        for x, y, radius in self.noise_circles:
-            draw.ellipse(
-                [x - radius, y - radius, x + radius, y + radius],
-                fill='black',
-                outline='black'
-            )
-
-    def draw_viewing_cone_on_image(self, image):
-        """Draw the viewing cone with 50% transparency directly on a PIL image"""
-        map_image = self.get_map_for_raytracing()
-        points = self.camera.get_viewing_cone_points(
-            self.robot.x, self.robot.y, self.robot.angle, map_image)
-
-        overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-
-        cone_color = (0, 0, 255, 127)
-        draw.polygon(points, fill=cone_color, outline=None)
-
-        image.paste(overlay, (0, 0), overlay)
 
     def capture_camera_view(self):
         """Capture camera view using the camera simulator"""
@@ -1315,11 +1004,11 @@ class App:
         result = self.localization.localize(self.current_camera_view, top_k=self.top_k)
 
         if result:
-            self.estimated_x = result['x']
-            self.estimated_y = result['y']
-            self.estimated_angle = result['angle']
-            self.retrieved_sample_idx = result['sample_idx']
-            self.top_k_matches = result.get('top_k_matches', [])
+            self.canvas_state.estimated_x = result['x']
+            self.canvas_state.estimated_y = result['y']
+            self.canvas_state.estimated_angle = result['angle']
+            self.canvas_state.retrieved_sample_idx = result['sample_idx']
+            self.canvas_state.top_k_matches = result.get('top_k_matches', [])
 
             self.display_retrieved_memory(
                 result['sample_idx'],
@@ -1482,8 +1171,8 @@ class App:
             if hasattr(self, 'convergence_embedding'):
                 delattr(self, 'convergence_embedding')
             # Clear visualization
-            self.convergence_visualization_strips = []
-            self.converged_position = None
+            self.canvas_state.convergence_visualization_strips = []
+            self.canvas_state.converged_position = None
             if hasattr(self, '_convergence_strip_images'):
                 self._convergence_strip_images = []
             self.update_map_display()
@@ -1491,8 +1180,8 @@ class App:
             # Start convergence
             self.is_converging = True
             self.convergence_step = 0
-            self.convergence_visualization_strips = []
-            self.converged_position = None
+            self.canvas_state.convergence_visualization_strips = []
+            self.canvas_state.converged_position = None
             # convergence_embedding will be initialized in convergence_step_update
             self.converge_btn.config(text="Stop Convergence")
             self.status_label['text'] = "⟳ Converging to pattern..."
@@ -1518,7 +1207,7 @@ class App:
 
             # Add initial embedding as first strip
             initial_view = self._embedding_to_image(self.convergence_embedding)
-            self.convergence_visualization_strips.append(initial_view)
+            self.canvas_state.convergence_visualization_strips.append(initial_view)
 
         # Perform one update step
         updated_embedding, converged = self.localization.hopfield_network.update_step(
@@ -1531,7 +1220,7 @@ class App:
 
         # Add updated embedding as a new strip
         updated_view = self._embedding_to_image(updated_embedding)
-        self.convergence_visualization_strips.append(updated_view)
+        self.canvas_state.convergence_visualization_strips.append(updated_view)
 
         # Find which pattern this embedding is closest to
         indices, weights = self.localization.hopfield_network.retrieve(updated_embedding, top_k=1)
@@ -1541,10 +1230,10 @@ class App:
         # Get the position of the best match
         if best_match_idx < len(self.localization.sample_positions):
             target_x, target_y, target_angle = self.localization.sample_positions[best_match_idx]
-            self.estimated_x = target_x
-            self.estimated_y = target_y
-            self.estimated_angle = target_angle
-            self.retrieved_sample_idx = best_match_idx
+            self.canvas_state.estimated_x = target_x
+            self.canvas_state.estimated_y = target_y
+            self.canvas_state.estimated_angle = target_angle
+            self.canvas_state.retrieved_sample_idx = best_match_idx
 
         # Update display
         self.update_map_display()
@@ -1565,7 +1254,7 @@ class App:
                 self.status_label['text'] = f"⚠️ Stopped after {self.convergence_step} iterations"
 
             # Store the converged position and angle for visualization
-            self.converged_position = (target_x, target_y, target_angle)
+            self.canvas_state.converged_position = (target_x, target_y, target_angle)
             self.update_map_display()
 
             # Clean up
@@ -1580,7 +1269,7 @@ class App:
             self.converge_btn.config(text="Converge to Pattern")
 
         # Clear convergence strips but keep the converged position (red circle)
-        self.convergence_visualization_strips = []
+        self.canvas_state.convergence_visualization_strips = []
         self.convergence_step = 0
         if hasattr(self, '_convergence_strip_images'):
             self._convergence_strip_images = []
@@ -1590,106 +1279,6 @@ class App:
         # Update display to remove strips but keep red circle
         self.update_map_display()
         self.status_label['text'] = "✓ Convergence trace cleared (final pattern position kept)"
-
-    def draw_convergence_path(self):
-        """Draw convergence steps as camera view strips"""
-        if not self.convergence_visualization_strips:
-            return
-
-        # Draw all convergence steps as horizontal strips in top-left corner
-        strip_height = 15
-        margin = 10
-        start_x = margin
-        start_y = margin
-
-        # Calculate how many strips fit vertically
-        canvas_height = self.map_canvas.winfo_height()
-        max_strips_per_column = max(1, (canvas_height - margin) // (strip_height + 2))
-
-        # Store reference list for garbage collection prevention
-        if not hasattr(self, '_convergence_strip_images'):
-            self._convergence_strip_images = []
-        else:
-            self._convergence_strip_images = []
-
-        for i, view in enumerate(self.convergence_visualization_strips):
-            # Calculate column and row
-            column = i // max_strips_per_column
-            row = i % max_strips_per_column
-
-            # Get the width from the camera view
-            view_width = view.size[0]
-
-            # Calculate column offset (view_width + label space + margin between columns)
-            column_width = view_width + 60
-            x_pos = start_x + column * column_width
-            y_pos = start_y + row * (strip_height + 2)
-
-            # Resize to display height
-            resized_view = view.resize(
-                (view_width, strip_height),
-                Image.Resampling.NEAREST
-            )
-
-            # Convert to PhotoImage
-            tk_view = ImageTk.PhotoImage(resized_view)
-
-            # Draw on canvas
-            self.map_canvas.create_image(
-                x_pos, y_pos,
-                image=tk_view,
-                anchor="nw",
-                tags="convergence_step_strip"
-            )
-
-            # Store reference to prevent garbage collection
-            self._convergence_strip_images.append(tk_view)
-
-            # Draw step number label next to the strip
-            label_x = x_pos + view_width + 5
-            color = "#00FF00" if i == len(self.convergence_visualization_strips) - 1 else "#FFA500"
-            self.map_canvas.create_text(
-                label_x, y_pos + strip_height // 2,
-                text=f"Step {i}",
-                fill=color,
-                anchor="w",
-                font=("Arial", 9),
-                tags="convergence_step_label"
-            )
-
-    def draw_converged_pattern_highlight(self):
-        """Draw a red circle around the converged pattern position with direction line"""
-        if self.converged_position is None:
-            return
-
-        x, y, angle = self.converged_position
-        canvas_x, canvas_y = self.image_to_canvas_coords(x, y)
-
-        # Draw red circle with no fill
-        radius = 20 * self.map_scale_factor
-
-        self.map_canvas.create_oval(
-            canvas_x - radius,
-            canvas_y - radius,
-            canvas_x + radius,
-            canvas_y + radius,
-            outline="#FF0000",
-            width=max(2, int(3 * self.map_scale_factor)),
-            tags="converged_pattern_highlight"
-        )
-
-        # Draw direction line from center to radius
-        angle_rad = math.radians(angle)
-        end_x = canvas_x + radius * math.cos(angle_rad)
-        end_y = canvas_y + radius * math.sin(angle_rad)
-
-        self.map_canvas.create_line(
-            canvas_x, canvas_y,
-            end_x, end_y,
-            fill="#FF0000",
-            width=max(2, int(3 * self.map_scale_factor)),
-            tags="converged_pattern_direction"
-        )
 
     def _embedding_to_image(self, embedding):
         """Convert an embedding vector back to a camera view image for visualization"""
