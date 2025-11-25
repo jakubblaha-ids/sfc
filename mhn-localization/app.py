@@ -12,6 +12,7 @@ from .sampling_engine import SamplingEngine
 from .confidence_analyzer import ConfidenceAnalyzer
 from .canvas_state import CanvasState
 from .canvas_renderer import CanvasRenderer
+from .utils import embedding_to_image
 import math
 import os
 import numpy as np
@@ -873,20 +874,12 @@ class App:
         """Handle map canvas resize and update display"""
         self.update_map_display()
 
-    def canvas_to_image_coords(self, canvas_x, canvas_y):
-        """Convert canvas coordinates to image coordinates"""
-        return self.canvas_state.canvas_to_image_coords(canvas_x, canvas_y)
-
-    def image_to_canvas_coords(self, img_x, img_y):
-        """Convert image coordinates to canvas coordinates"""
-        return self.canvas_state.image_to_canvas_coords(img_x, img_y)
-
     def on_canvas_hover(self, event):
         """
         Handle mouse hover over the canvas.
         Display the saved sample when hovering over a red dot.
         """
-        img_x, img_y = self.canvas_to_image_coords(event.x, event.y)
+        img_x, img_y = self.canvas_state.canvas_to_image_coords(event.x, event.y)
 
         closest_idx = None
         min_distance = 15
@@ -1206,7 +1199,7 @@ class App:
             self.convergence_step = 0
 
             # Add initial embedding as first strip
-            initial_view = self._embedding_to_image(self.convergence_embedding)
+            initial_view = embedding_to_image(self.convergence_embedding, self.localization.interleaved_rgb)
             self.canvas_state.convergence_visualization_strips.append(initial_view)
 
         # Perform one update step
@@ -1219,7 +1212,7 @@ class App:
         self.convergence_history.append(updated_embedding.copy())
 
         # Add updated embedding as a new strip
-        updated_view = self._embedding_to_image(updated_embedding)
+        updated_view = embedding_to_image(updated_embedding, self.localization.interleaved_rgb)
         self.canvas_state.convergence_visualization_strips.append(updated_view)
 
         # Find which pattern this embedding is closest to
@@ -1279,34 +1272,6 @@ class App:
         # Update display to remove strips but keep red circle
         self.update_map_display()
         self.status_label['text'] = "✓ Convergence trace cleared (final pattern position kept)"
-
-    def _embedding_to_image(self, embedding):
-        """Convert an embedding vector back to a camera view image for visualization"""
-        # Reconstruct the RGB image from the embedding
-        num_pixels = len(embedding) // 3
-
-        if self.localization.interleaved_rgb:
-            # Interleaved: [R0, G0, B0, R1, G1, B1, ...]
-            pixels = []
-            for i in range(num_pixels):
-                r = int(np.clip(embedding[i * 3], 0, 255))
-                g = int(np.clip(embedding[i * 3 + 1], 0, 255))
-                b = int(np.clip(embedding[i * 3 + 2], 0, 255))
-                pixels.append((r, g, b))
-        else:
-            # Channel-separated: [R0, R1, ..., G0, G1, ..., B0, B1, ...]
-            pixels = []
-            for i in range(num_pixels):
-                r = int(np.clip(embedding[i], 0, 255))
-                g = int(np.clip(embedding[num_pixels + i], 0, 255))
-                b = int(np.clip(embedding[2 * num_pixels + i], 0, 255))
-                pixels.append((r, g, b))
-
-        # Create a 1-pixel tall image
-        img = Image.new('RGB', (num_pixels, 1))
-        img.putdata(pixels)
-
-        return img
 
     def run(self):
         self.update_map_display()
