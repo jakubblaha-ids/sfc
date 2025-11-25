@@ -64,7 +64,16 @@ DEFAULT_NOISE_AMOUNT = 10
 # Resolution scale for heatmap computation (0.25 = 1/4 resolution)
 # Lower values = faster computation but less detail
 # The heatmap is smoothly upscaled to full resolution for display
+
+# Resolution scale for heatmap computation (0.25 = 1/4 resolution)
+# Lower values = faster computation but less detail
+# The heatmap is smoothly upscaled to full resolution for display
 HEATMAP_RESOLUTION_SCALE = 0.25
+
+# Optimization Constants
+CONVERGENCE_THRESHOLD = 1e-6
+RAYCAST_STEP_SIZE = 5.0
+MAX_CONVERGENCE_ITERATIONS = 100
 
 # Help text
 HELP_TEXT = """ROBOT LOCALIZATION VIA MODERN HOPFIELD NETWORKS

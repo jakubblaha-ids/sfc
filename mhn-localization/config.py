@@ -1,5 +1,10 @@
 import json
 import os
+from .constants import (
+    CAMERA_BLUR_RADIUS, CAMERA_FOV, DEFAULT_BETA, DEFAULT_TOP_K,
+    DEFAULT_NOISE_AMOUNT, INTERLEAVED_RGB, DEFAULT_NUM_ANGLES,
+    CAMERA_NUM_RAYS
+)
 
 
 class ConfigManager:
@@ -35,16 +40,16 @@ class ConfigManager:
         """Return default configuration"""
         return {
             "last_map_path": None,
-            "blur_radius": None,
-            "fov": None,
-            "visibility_index": None,
-            "beta": None,
-            "top_k": None,
-            "noise_amount": None,
-            "apply_noise": None,
-            "interleaved_rgb": None,
-            "num_angles": None,
-            "num_rays": None
+            "blur_radius": CAMERA_BLUR_RADIUS,
+            "fov": CAMERA_FOV,
+            "visibility_index": 0.1,
+            "beta": DEFAULT_BETA,
+            "top_k": DEFAULT_TOP_K,
+            "noise_amount": DEFAULT_NOISE_AMOUNT,
+            "apply_noise": False,
+            "interleaved_rgb": INTERLEAVED_RGB,
+            "num_angles": DEFAULT_NUM_ANGLES,
+            "num_rays": CAMERA_NUM_RAYS
         }
 
     def save_config(self):

@@ -19,6 +19,30 @@ class SamplingEngine:
         self.stride = stride
         self.num_rotations = num_rotations
 
+    def _generate_grid(self, stride):
+        """
+        Generate a grid of (x, y) positions based on the stride.
+
+        Args:
+            stride: Grid spacing
+
+        Returns:
+            List of (x, y) tuples
+        """
+        half_stride = max(0, stride // 2)
+        x_positions = list(range(half_stride, MAP_WIDTH, stride))
+        y_positions = list(range(half_stride, MAP_HEIGHT, stride))
+        
+        grid = []
+        for x in x_positions:
+            for y in y_positions:
+                grid.append((x, y))
+        return grid
+
+    def _generate_angles(self):
+        """Generate list of rotation angles."""
+        return [i * (360 / self.num_rotations) for i in range(self.num_rotations)]
+
     def generate_sample_positions(self):
         """
         Generate a grid of sample positions with rotations.
@@ -26,19 +50,13 @@ class SamplingEngine:
         Returns:
             List of (x, y, angle) tuples representing sample positions
         """
+        grid = self._generate_grid(self.stride)
+        angles = self._generate_angles()
+        
         positions = []
-
-        half_stride = self.stride // 2
-        x_positions = list(range(half_stride, MAP_WIDTH, self.stride))
-        y_positions = list(range(half_stride, MAP_HEIGHT, self.stride))
-
-        angles = [i * (360 / self.num_rotations)
-                  for i in range(self.num_rotations)]
-
-        for x in x_positions:
-            for y in y_positions:
-                for angle in angles:
-                    positions.append((x, y, angle))
+        for x, y in grid:
+            for angle in angles:
+                positions.append((x, y, angle))
 
         return positions
 
@@ -54,18 +72,13 @@ class SamplingEngine:
             List of (x, y, angle) tuples representing test positions
         """
         grid_stride = max(1, self.stride // 2)
-        half_stride = max(0, grid_stride // 2)
-
-        x_positions = list(range(half_stride, MAP_WIDTH, grid_stride))
-        y_positions = list(range(half_stride, MAP_HEIGHT, grid_stride))
-        test_angles = [i * (360 / self.num_rotations)
-                       for i in range(self.num_rotations)]
+        grid = self._generate_grid(grid_stride)
+        angles = self._generate_angles()
 
         all_positions = []
-        for angle in test_angles:
-            for x in x_positions:
-                for y in y_positions:
-                    all_positions.append((x, y, angle))
+        for angle in angles:
+            for x, y in grid:
+                all_positions.append((x, y, angle))
 
         if num_positions is None:
             return all_positions
@@ -83,23 +96,14 @@ class SamplingEngine:
                 - angles: List of angles used
         """
         grid_stride = self.stride // 2
-        half_stride = grid_stride // 2
-
-        x_positions = list(range(half_stride, MAP_WIDTH, grid_stride))
-        y_positions = list(range(half_stride, MAP_HEIGHT, grid_stride))
-
-        test_angles = [i * (360 / self.num_rotations)
-                       for i in range(self.num_rotations)]
+        grid = self._generate_grid(grid_stride)
+        angles = self._generate_angles()
 
         positions_by_angle = {}
-        for angle in test_angles:
-            positions_for_angle = []
-            for x in x_positions:
-                for y in y_positions:
-                    positions_for_angle.append((x, y))
-            positions_by_angle[angle] = positions_for_angle
+        for angle in angles:
+            positions_by_angle[angle] = list(grid)
 
-        return positions_by_angle, test_angles
+        return positions_by_angle, angles
 
     def get_total_samples(self):
         """
@@ -108,8 +112,5 @@ class SamplingEngine:
         Returns:
             Total number of (x, y, angle) combinations
         """
-        half_stride = self.stride // 2
-        x_count = len(range(half_stride, MAP_WIDTH, self.stride))
-        y_count = len(range(half_stride, MAP_HEIGHT, self.stride))
-
-        return x_count * y_count * self.num_rotations
+        grid = self._generate_grid(self.stride)
+        return len(grid) * self.num_rotations

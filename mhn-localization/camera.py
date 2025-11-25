@@ -1,6 +1,6 @@
 import math
 from PIL import Image, ImageFilter
-from .constants import MAP_WIDTH, MAP_HEIGHT
+from .constants import MAP_WIDTH, MAP_HEIGHT, RAYCAST_STEP_SIZE
 
 
 class CameraSimulator:
@@ -110,7 +110,7 @@ class CameraSimulator:
             Distance to first obstacle
         """
         max_distance = self._get_distance_to_edge(x, y, dx, dy)
-        step_size = 5.0
+        step_size = RAYCAST_STEP_SIZE
         pixels = map_image.load()
 
         distance = 0
@@ -120,14 +120,16 @@ class CameraSimulator:
             current_x = x + distance * dx
             current_y = y + distance * dy
 
-            pixel_x = int(round(current_x))
-            pixel_y = int(round(current_y))
+            # Fast integer conversion
+            pixel_x = int(current_x)
+            pixel_y = int(current_y)
 
             if pixel_x < 0 or pixel_x >= MAP_WIDTH or pixel_y < 0 or pixel_y >= MAP_HEIGHT:
                 return distance
 
             pixel_color = pixels[pixel_x, pixel_y]
 
+            # Check for non-white color (wall)
             if pixel_color[0] < 255 or pixel_color[1] < 255 or pixel_color[2] < 255:
                 return distance
 

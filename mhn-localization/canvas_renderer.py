@@ -72,11 +72,14 @@ class CanvasRenderer:
         if state.show_energy_heatmap and state.energy_heatmap_image:
             display_image.paste(state.energy_heatmap_image, (0, 0), state.energy_heatmap_image)
 
+        # Batch render sample dots onto the image
+        self._draw_sample_dots_on_image(display_image, state)
+
         # Scale and display the base image
         self._display_scaled_map_image(display_image, canvas, state)
 
         # Draw overlays on canvas (order matters for layering)
-        self._draw_sample_dots(canvas, state)
+        # self._draw_sample_dots(canvas, state) # Moved to batch rendering
         self._draw_test_position_dots(canvas, state)
         self._draw_top_k_interpolation_lines(canvas, state)
         self._draw_converged_pattern_highlight(canvas, state)
@@ -151,34 +154,56 @@ class CanvasRenderer:
         image.paste(overlay, (0, 0), overlay)
 
     def _draw_sample_dots(self, canvas: tk.Canvas, state: CanvasState):
-        """Draw red dots at sample positions on the canvas, sized by similarity"""
+        """Draw red dots at sample positions using batch rendering on a transparent layer"""
+        if not state.sample_positions:
+            return
+
+        # Create a transparent overlay for dots
+        # We use the original map size and scale it later, or draw directly on scaled?
+        # Drawing on original map size is better for quality but might be slower to scale every frame.
+        # However, sample positions are in map coordinates.
+        
+        # Let's draw directly on the displayed image (which is already scaled/cached in _tk_map_image?)
+        # No, _tk_map_image is the final result. We should modify the display_image before converting to Tk.
+        
+        # Actually, the render method structure suggests we are drawing overlays ON TOP of the canvas.
+        # But for performance, we want to avoid creating thousands of canvas items.
+        # So we should draw these dots onto the display_image in the render method BEFORE it gets converted to ImageTk.
+        pass
+
+    def _draw_sample_dots_on_image(self, image: Image.Image, state: CanvasState):
+        """Draw sample dots directly on the PIL image (batch rendering)"""
+        if not state.sample_positions:
+            return
+
+        draw = ImageDraw.Draw(image)
+        
         sample_similarities = state.sample_similarities
         max_similarity = None
         if sample_similarities is not None and len(sample_similarities) > 0:
             max_similarity = max(sample_similarities.max(), 1e-6)
 
+        # Pre-calculate colors and radii to avoid repeated logic inside loop if possible,
+        # but radius depends on similarity.
+        
+        # Use a fixed color for all dots
+        dot_color = COLOR_SAMPLE_DOT
+        
         for i, (x, y, _angle) in enumerate(state.sample_positions):
             if sample_similarities is not None and i < len(sample_similarities):
                 similarity = sample_similarities[i]
                 min_radius = 1
                 max_radius = 5
-
                 normalized_similarity = similarity / max_similarity
-                dot_radius = min_radius + (max_radius - min_radius) * normalized_similarity
+                radius = min_radius + (max_radius - min_radius) * normalized_similarity
             else:
-                dot_radius = 3  # SAMPLE_DOT_RADIUS default
+                radius = 3  # SAMPLE_DOT_RADIUS
 
-            canvas_x, canvas_y = state.image_to_canvas_coords(x, y)
-            scaled_radius = dot_radius * state.map_scale_factor
-
-            canvas.create_rectangle(
-                canvas_x - scaled_radius,
-                canvas_y - scaled_radius,
-                canvas_x + scaled_radius,
-                canvas_y + scaled_radius,
-                fill=COLOR_SAMPLE_DOT,
-                outline=COLOR_SAMPLE_DOT,
-                tags=("sample_dot", f"sample_{i}")
+            # Draw circle on image
+            draw.ellipse(
+                [x - radius, y - radius, x + radius, y + radius],
+                fill=dot_color,
+                outline=dot_color
             )
 
     def _draw_test_position_dots(self, canvas: tk.Canvas, state: CanvasState):
