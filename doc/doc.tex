@@ -39,8 +39,7 @@ the robot by combining information from the best matching visual features. The
 implementation provides an interactive visualization showing the map, the
 robot's movement, its field of view, and the real-time localization process.
 Users can configure network parameters such as temperature ($\beta$), number of
-observations stored, observation dimensions, and the number of retrieval
-iterations.
+observations stored, observation dimensions, etc.
 
 \section{Modern Hopfield Networks}
 
@@ -52,18 +51,16 @@ patterns called spurious attractors.
 Modern Hopfield Networks (MHN)\footnote{Ramsauer, H., Schäfl, B., Lehner, J.,
 et al. (2020). Hopfield Networks is All You Need. arXiv:2008.02217.
 \url{https://arxiv.org/abs/2008.02217}}\footnote{Modern Hopfield Network.
-Wikipedia. \url{https://en.wikipedia.org/wiki/Modern_Hopfield_network}}
-significantly improve upon the classical version by using a different energy
-function that allows storing exponentially more patterns while providing better
-retrieval accuracy. The network works by storing patterns in memory during a
-learning phase, then retrieving the most similar patterns when presented with a
-new query.
+Wikipedia. \url{https://en.wikipedia.org/wiki/Modern_Hopfield_network}} improve
+upon the classical version by using a different energy function that allows
+storing exponentially more patterns while providing better retrieval accuracy.
+The network works by storing patterns in memory during a learning phase, then
+retrieving the most similar patterns when presented with a new query.
 
 A key parameter is the temperature ($\beta$), which controls how selective the
 retrieval is. Higher values make the network focus on fewer best matches, while
-lower values allow it to consider a broader range of similar patterns. This is
-useful when the robot's observation might match several nearby positions on the
-map.
+lower values allow it to consider a range of similar patterns. This is useful
+when the robot's observation might match several nearby positions on the map.
 
 \section{Implementation}
 
@@ -72,8 +69,9 @@ Tkinter, Pillow and matplotlib for the UI, numpy and scipy for computations.
 Implementation is split into several files in the effort to encapsulate similar
 logic together.
 
-User interface and app state lives inside \texttt{main.py}, \texttt{editor.py}
-and \texttt{robot\_state.py}, MHN is implemented inside \texttt{hopfield.py},
+User interface and app state lives inside \texttt{main.py}, \texttt{editor.py},
+\texttt{canvas\_state.py}, \texttt{canvas\_renderer.py} and
+\texttt{robot\_state.py}, MHN is implemented inside \texttt{hopfield.py},
 camera sample capturing in \texttt{camera.py}, position prediction with
 weighted averaging inside \texttt{localization.py}.
 
@@ -97,8 +95,7 @@ along with their weights for position estimation.
 
 The temperature parameter ($\beta$) controls retrieval selectivity. Higher
 values make the network focus sharply on the best match. Lower values allow
-broader consideration of similar patterns and allow more vectors to influence
-the final position prediction.
+more vectors to influence the final position prediction.
 
 The network uses an iterative update rule to converge to the nearest stored
 pattern when simulating convergence. Given a query state $\mathbf{x}^{(t)}$ at
@@ -138,7 +135,7 @@ checking for obstacles. Each raycast determines the distance to the nearest
 obstacle in that direction.
 
 The intensity of observed colors is modulated by distance. Colors fade toward
-white based on the distance to the obstacle, controlled by a configurable
+black based on the distance to the obstacle, controlled by a configurable
 visibility index factor. This simulates limited visibility where distant
 objects appear less distinct.
 
@@ -175,7 +172,8 @@ is captured and stored with its ground-truth coordinates.
 
 During training collected observations are converted to embeddings and passed
 to the Hopfield network for storage. Training is instantaneous as Modern
-Hopfield Networks require no iterative optimization.
+Hopfield Networks require no iterative optimization when exact patterns are
+stored.
 
 During inference, a query observation is converted to an embedding vector and
 passed to the MHN. The network retrieves the top-k closest matching patterns
@@ -188,9 +186,9 @@ For $k=1$, the robot's position is determined directly from the best matching
 stored observation. For $k>1$, a weighted average position is computed using
 normalized attention weights from the network and the grid coordinates of the
 matched patterns. The orientation is taken from the best matching pattern. This
-allows the network to combine information from multiple similar observations,
-possibly providing more accurate localization when multiple positions have
-similar visual features.
+allows the localization engine to combine information from multiple similar
+observations, possibly providing more accurate localization when multiple
+positions have similar visual features.
 
 \subsection{Visualization}
 
@@ -228,14 +226,14 @@ prediction confidence at grid positions. For every cell in grid finer than the
 capture grid overlaying the map, the application captures an observation at
 that position, queries the MDN, and records the attention weight assigned to
 the best matching pattern. These attention weights, naturally represent the
-network's confidence in its prediction—higher weights indicate stronger, more
-distinctive matches while lower weights suggest ambiguous observations. The
-resulting confidence values are interpolated and displayed as a color-coded
-overlay, with warmer colors indicating high-confidence regions, and cooler
-colors showing areas where localization is uncertain. The heatmap can be
-computed and displayed for each angle separately (changing dynamically as the
-robot rotates), or averaged across all angles to show overall confidence
-independent of orientation.
+network's confidence in its prediction. The resulting confidence values are
+interpolated and displayed as a color-coded overlay, with warmer colors
+indicating high-confidence regions, and cooler colors showing areas where
+localization is uncertain.
+
+The heatmap can be computed and displayed for each angle separately (changing
+dynamically as the robot rotates), or averaged across all angles to show
+overall confidence independent of orientation.
 
 \paragraph{Map editor} allows the user to draw a map of their liking and use it inside the demo.
 
@@ -243,7 +241,7 @@ independent of orientation.
 locations, demonstrating that the network can still localize the robot even if
 a part of the camera view is occupied.
 
-\paragraph{Convegence} the program demonstrates the convergence to the most similar vector by
+\paragraph{Convergence} the program demonstrates the convergence to the most similar vector by
 gradually updating the state using the MHN update rule and displaying the state
 obtained in different iterations on the screen.
 
