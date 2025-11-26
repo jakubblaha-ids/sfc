@@ -143,11 +143,6 @@ class ModernHopfieldNetwork:
                 # For simplicity in this version, we assume we are optimizing the vectors directly
                 # and re-normalize after update.
                 
-                # Gradient update:
-                # We want to pull patterns closer to observations that attend to them.
-                # Delta M = lr * (batch_normalized.T @ attention).T = lr * attention.T @ batch_normalized
-                # Shape: (num_patterns, batch_size) @ (batch_size, dim) -> (num_patterns, dim)
-                
                 grad = np.dot(attention.T, batch_normalized)
                 
                 # Update memory
