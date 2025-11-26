@@ -22,6 +22,7 @@ from tkinter import simpledialog
 
 import matplotlib.pyplot as plt
 
+
 class App:
     def __init__(self):
         self.root = tk.Tk()
@@ -42,7 +43,6 @@ class App:
         self._num_angles = self.config.get("num_angles", DEFAULT_NUM_ANGLES)
         self._num_rays = self.config.get("num_rays", CAMERA_NUM_RAYS)
 
-        # Logic components (separated from UI)
         self.robot = RobotState()
         self.camera = CameraSimulator(
             cone_angle=self._fov,
@@ -58,10 +58,8 @@ class App:
         self.sampling = SamplingEngine(num_rotations=self._num_angles)
         self.confidence = ConfidenceAnalyzer(MAP_WIDTH, MAP_HEIGHT)
 
-        # Canvas renderer
         self.renderer = CanvasRenderer()
 
-        # Canvas state - single source of truth for all rendering state
         self.canvas_state = CanvasState(
             current_map_image=Image.new("RGB", (MAP_WIDTH, MAP_HEIGHT), "white"),
             robot_x=self.robot.x,
@@ -99,13 +97,13 @@ class App:
             lambda msg: self.status_label.config(text=msg),
             self.update_map_display
         )
-        self.convergence_controller.on_convergence_finished = lambda: self.converge_btn.config(text="Converge to Pattern")
+        self.convergence_controller.on_convergence_finished = lambda: self.converge_btn.config(
+            text="Converge to Pattern")
 
         self.keys_pressed = set()
         self.update_interval = 16
 
         self.rotation_keys_pressed = set()
-
 
         self.create_layout()
         self.create_toolbar()
@@ -114,7 +112,6 @@ class App:
 
         self.load_last_map()
 
-        # Generate noise circles on startup if noise is enabled
         if self._apply_noise:
             self.generate_noise_circles()
 
@@ -167,7 +164,6 @@ class App:
                              text=btn_text, command=command)
             btn.pack(side=tk.LEFT, padx=5)
 
-        # Add Auto-Explore & Train button
         self.auto_explore_btn = ttk.Button(
             self.toolbar_frame,
             text="Train using SGD",
@@ -213,13 +209,11 @@ class App:
         )
 
     def create_right_panel(self):
-        # Create a frame for the right panel with a scrollbar
         right_panel_container = ttk.Frame(self.content_frame, width=400)
         right_panel_container.pack(
             side=tk.LEFT, fill=tk.Y, expand=False, padx=(5, 10))
         right_panel_container.pack_propagate(False)
 
-        # Add a canvas and scrollbar for scrolling
         canvas = tk.Canvas(right_panel_container)
         scrollbar = ttk.Scrollbar(
             right_panel_container, orient=tk.VERTICAL, command=canvas.yview)
@@ -235,7 +229,6 @@ class App:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Add content to the right panel
         input_frame = tk.LabelFrame(self.right_panel, text="Current Input")
         input_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -257,7 +250,6 @@ class App:
         sim_frame = tk.LabelFrame(self.right_panel, text="Similarity Metric")
         sim_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        # Align all label texts to the left side
         self.sim_label = ttk.Label(
             sim_frame, text="Confidence: 0.0%", anchor="w"
         )
@@ -381,7 +373,6 @@ class App:
             num_angles_container, from_=0, to=3, orient=tk.HORIZONTAL,
             command=self.on_num_angles_change
         )
-        # Map slider position (0-3) to actual values (4, 8, 16, 32)
         valid_angles = [4, 8, 16, 32]
         slider_position = valid_angles.index(self._num_angles) if self._num_angles in valid_angles else 2
         self.num_angles_slider.set(slider_position)
@@ -411,7 +402,6 @@ class App:
         )
         self.apply_noise_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
-        # Interleaved RGB checkbox (left-aligned)
         self.interleaved_rgb_checkbox = ttk.Checkbutton(
             settings_frame, text="Interleaved RGB encoding",
             variable=self.interleaved_rgb,
@@ -419,7 +409,6 @@ class App:
         )
         self.interleaved_rgb_checkbox.pack(fill=tk.X, padx=5, pady=5)
 
-        # Confidence statistics frame (contains computation-position and heatmap checkboxes)
         stats_frame = tk.LabelFrame(
             self.right_panel, text="Confidence Statistics"
         )
@@ -432,8 +421,6 @@ class App:
         )
         self.stats_label.pack(fill=tk.X, padx=5, pady=5)
 
-        # Align checkbox labels to the left and pack them into stats_frame
-        # Checkbox: show the positions used during the confidence computation
         self.show_test_positions_checkbox = ttk.Checkbutton(
             stats_frame, text="Show confidence computation positions",
             variable=self.show_test_positions,
@@ -673,7 +660,6 @@ class App:
             self.robot_image = None
 
     def load_last_map(self):
-        """Load the last used map automatically on startup"""
         last_path = self.config.get_last_map_path()
 
         if last_path and os.path.exists(last_path):
@@ -812,73 +798,71 @@ class App:
         Start the auto-exploration and training process.
         Collects samples from a grid and trains the network to find optimal prototypes.
         """
-        
+
         # Get grid positions to calculate total samples
         grid_positions = self.sampling.generate_sample_positions()
         total_samples = len(grid_positions)
-        
+
         # Ask for number of patterns to learn
         num_patterns = simpledialog.askinteger(
-            "Auto-Explore & Train", 
+            "Auto-Explore & Train",
             f"Grid sampling will collect {total_samples} observations.\n\n"
             "How many patterns (prototypes) should the network learn?",
             parent=self.root, minvalue=1, maxvalue=total_samples, initialvalue=min(100, total_samples // 10)
         )
         if num_patterns is None:
             return
-            
+
         self.status_label['text'] = "⟳ Exploring... Collecting grid samples..."
         self.root.update()
-        
+
         original_state = self.robot.copy_state()
-        
+
         # Clear existing samples
         self.localization.clear_samples()
-        
+
         map_image = self.get_map_for_raytracing()
-        
-        # Collect samples from grid
+
         for i, (x, y, angle) in enumerate(grid_positions):
-            # Move robot visually
             self.robot.x = x
             self.robot.y = y
             self.robot.angle = angle
             self.canvas_state.robot_x = x
             self.canvas_state.robot_y = y
             self.canvas_state.robot_angle = angle
-            
+
             # Capture view
             camera_view = self.camera.capture_view(x, y, angle, map_image)
             self.localization.add_sample(x, y, angle, camera_view)
-            
+
             if i % 50 == 0:
                 self.status_label['text'] = f"⟳ Exploring... Sample {i+1}/{total_samples}"
                 self.root.update()
-                
+
         self.update_map_display()
-        
+
         # Train
         self.status_label['text'] = f"⟳ Training network with {num_patterns} patterns..."
         self.root.update()
-        
+
         def train_callback(epoch, total, loss):
             if epoch % 5 == 0 or epoch == total:
                 self.status_label['text'] = f"⟳ Training... Epoch {epoch}/{total}, Loss: {loss:.4f}"
                 self.root.update()
-        
+
         success, loss_history = self.localization.train_sgd(
             num_patterns=num_patterns,
             learning_rate=0.1,
             epochs=100,
             progress_callback=train_callback
         )
-        
+
         if success:
             self.status_label['text'] = f"✓ Exploration complete! Learned {num_patterns} patterns from {total_samples} samples."
             self.show_training_stats(loss_history)
         else:
             self.status_label['text'] = "❌ Training failed."
-            
+
         self.robot.restore_state(original_state)
         self.update_map_display()
 
@@ -888,7 +872,7 @@ class App:
         """
         if not loss_history:
             return
-            
+
         plt.figure(figsize=(8, 5))
         plt.plot(loss_history, 'b-', linewidth=2)
         plt.title("Training Loss (Energy)")
@@ -896,8 +880,6 @@ class App:
         plt.ylabel("Energy")
         plt.grid(True)
         plt.show(block=False)
-
-
 
     def train_network(self, show_message=True):
         """
@@ -1276,7 +1258,6 @@ class App:
             started = self.convergence_controller.start_convergence(self.current_camera_view)
             if started:
                 self.converge_btn.config(text="Stop Convergence")
-
 
     def clear_convergence(self):
         """Clear convergence visualization from the canvas but keep the final red circle"""
