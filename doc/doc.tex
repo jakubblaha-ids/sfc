@@ -275,9 +275,14 @@ somewhat accurate localization with significantly fewer stored patterns.
 
 \section{Running the Program}
 
+Unfortunately the installation process requires admin privileges.
+
 To run the program, create a virtual environment, install dependencies and
 execute as a Python module:
 \begin{verbatim}
+sudo apt-get install python3-tk
+sudo apt-get install python3.12-venv
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -287,6 +292,23 @@ python -m mhn-localization
 The program does not require any arguments, everything can be set intuitively
 using the GUI. The robot movement can be controlled using the keys
 \texttt{WASD}. Rotation can be controlled using keys \texttt{J} and \texttt{L}.
+
+After running the program, please start by importing a map using the Import Map
+button and by training using sampling, exploring how the robot predicts the
+location. Tweaking the beta parameter on the right side of the UI and the
+Combine top-k matches will affect the final position prediction. Changing the
+FOV will improve the localization accuracy. Training using SGD is less accurate
+and may not yield as precise predictions as training using sampling.
+
+Unfortunately, the rendering inside the VM is a little broken, so please see
+the image below on how the UI should look and looks outside the VM.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{img/ui.png}
+    \caption{Cat represents the robot; network is trained using SGD; environment was sampled, 1000 random vectors were picked as initial memories, network was trained to best represent all sampled vectors using these 1000 memories; blue area represents what the robot sees; small red dots represent locations of learned memories; large red dots represent most similar memories; green dot is the weighted average of the 4 most similar memories; black lines connect most similar memories; heatmap represents the confidence of the network in its prediction, which is derived from the attention weights.}
+    \label{fig:ui}
+\end{figure}
 
 % \bibliographystyle{plain}
 % \bibliography{references}
