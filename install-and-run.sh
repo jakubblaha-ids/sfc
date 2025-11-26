@@ -9,6 +9,9 @@ if [ ! -d "$VENV_DIR" ]; then
     if command -v apt-get &> /dev/null; then
         echo "Detected apt-get. Attempting to install python3.12-venv..."
         sudo apt-get update && sudo apt-get install -y python3.12-venv
+
+        echo "Detected apt-get. Attempting to install python3-tk..."
+        sudo apt-get install -y python3-tk
     fi
 
     echo "Creating virtual environment in $VENV_DIR..."
