@@ -151,8 +151,8 @@ class ConfidenceAnalyzer:
                 grid_confidences_by_angle=self.heatmap_grid_confidences_by_angle,
                 colormap_name=colormap,
                 sigma=sigma,
-                alpha_base=100,
-                alpha_scale=155,
+                alpha_base=50,
+                alpha_scale=77,
                 threshold=0.001
             )
         else:
@@ -176,8 +176,8 @@ class ConfidenceAnalyzer:
                 grid_confidences=grid_confidences,
                 colormap_name=colormap,
                 sigma=sigma,
-                alpha_base=100,
-                alpha_scale=155,
+                alpha_base=50,
+                alpha_scale=77,
                 threshold=0.001
             )
 
@@ -215,8 +215,8 @@ class ConfidenceAnalyzer:
                 grid_confidences_by_angle=self.heatmap_grid_energies_by_angle,
                 colormap_name=colormap,
                 sigma=sigma,
-                alpha_base=100,
-                alpha_scale=155,
+                alpha_base=50,
+                alpha_scale=77,
                 threshold=None,  # Energy can be negative, so no threshold
                 invert_values=True  # Invert so low energy = high value (bright)
             )
@@ -241,8 +241,8 @@ class ConfidenceAnalyzer:
                 grid_confidences=grid_energies,
                 colormap_name=colormap,
                 sigma=sigma,
-                alpha_base=100,
-                alpha_scale=155,
+                alpha_base=50,
+                alpha_scale=77,
                 threshold=None,  # Energy can be negative, so no threshold
                 invert_values=True  # Invert so low energy = high value (bright)
             )
