@@ -1,5 +1,6 @@
 % Save as dfa.tex and compile with: pdflatex dfa.tex
 \documentclass[12pt]{article}
+\usepackage{xcolor}
 \usepackage[linesnumbered,ruled,vlined]{algorithm2e}
 \usepackage{graphicx}
 \usepackage{hyperref}
@@ -7,6 +8,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{gensymb}
+
 
 \DeclareMathOperator*{\lse}{lse}
 \DeclareMathOperator*{\softmax}{softmax}
@@ -300,13 +302,15 @@ Combine top-k matches will affect the final position prediction. Changing the
 FOV will improve the localization accuracy. Training using SGD is less accurate
 and may not yield as precise predictions as training using sampling.
 
-Unfortunately, the rendering inside the VM is a little broken, so please see
-the image below on how the UI should look and looks outside the VM.
+\textcolor{red}{Unfortunately, the rendering inside the VM is a little broken; please see the
+    image below on how the UI looks outside the VM, or fix it by modifying the VM
+    settings to disable hardware acceleration in VirtualBox \textgreater VM
+    Settings \textgreater Display \textgreater 3D Acceleration (\href{https://askubuntu.com/questions/1454571/some-application-guis-do-not-render-correctly-since-updating-to-22-04}{StackOverflow}).}
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=\textwidth]{img/ui.png}
-    \caption{Cat represents the robot; network is trained using SGD; environment was sampled, 1000 random vectors were picked as initial memories, network was trained to best represent all sampled vectors using these 1000 memories; blue area represents what the robot sees; small red dots represent locations of learned memories; large red dots represent most similar memories; green dot is the weighted average of the 4 most similar memories; black lines connect most similar memories; heatmap represents the confidence of the network in its prediction, which is derived from the attention weights.}
+    \caption{\small{Cat represents the robot; network is trained using SGD; environment was sampled, 1000 random vectors were picked as initial memories, network was trained to best represent all sampled vectors using these 1000 memories; blue area represents what the robot sees; small red dots represent locations of learned memories; large red dots represent most similar memories; green dot is the weighted average of the 4 most similar memories; black lines connect most similar memories; heatmap represents the confidence of the network in its prediction, which is derived from the attention weights.}}
     \label{fig:ui}
 \end{figure}
 
