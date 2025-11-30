@@ -1,11 +1,12 @@
+Refactor:
+ <!-- - Retraining required warning -->
+
 Crucial:
 
 -   maybe change angle averaging?
--   energy heatmap
 -   plot of energy function during convergence
--   image in doc
--   confidence using energy
 -   add how confidence is computed into doc
+-   add energy computation into the UI
 
 Nice to have:
 
@@ -28,3 +29,6 @@ Done:
 -   average confidence into docs
 -   noise to docs
 -   convergence mode
+-   energy heatmap
+-   image in doc
+-   confidence using energy
