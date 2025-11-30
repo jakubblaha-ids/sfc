@@ -75,6 +75,9 @@ CONVERGENCE_THRESHOLD = 1e-6
 RAYCAST_STEP_SIZE = 5.0
 MAX_CONVERGENCE_ITERATIONS = 100
 
+# Messages
+RETRAINING_REQUIRED_MSG = "⚠️ Retraining required"
+
 # Help text
 HELP_TEXT = """ROBOT LOCALIZATION VIA MODERN HOPFIELD NETWORKS
 
@@ -101,27 +104,29 @@ TOOLBAR BUTTONS:
 - Sample & Train - Generate observation samples and train the network
 - Train using SGD - Collect grid samples and train prototypes using SGD
 - Converge to Pattern - Iteratively move robot toward best matching pattern
+- Clear convergence - Clear the convergence visualization
 - Help - Show this help dialog
 
 SETTINGS:
 - Blur Radius - Amount of blur applied to camera observations
-- Field of View - Viewing angle of the robot's camera (30-360°)
+- Field of View - Viewing angle of the robot's camera
 - Number of Camera Rays - Number of rays captured (controls embedding dimension: rays × 3)
-- Visibility Index - How far the robot can see (0.01-1.0)
+- Visibility Index - How far the robot can see, lower values mean the robot can see further
 - Beta (Inverse Temp) - Sharpness of retrieval (higher = more selective)
 - Combine top k matches - Number of closest matches to average for prediction
 - Number of Angles per Location - Number of orientations sampled at each training position
-- Noise Settings - Add random circular obstacles to the map
-- Interleaved RGB encoding - Alternative pattern encoding method
+- Noise Settings - Add random circular obstacles to the map to demonstrate prediction robustness even if noise is present
+- Interleaved RGB encoding - Alternative pattern encoding method, might work better in some cases
 
 CONFIDENCE STATISTICS:
 - Show confidence computation positions - Display test positions (blue dots)
-- Show confidence heatmap - Overlay confidence values across the map
+- Show confidence heatmap - Overlay confidence values across the map. Warmer colors mean higher confidence.
+- Show energy heatmap - Overlay energy function values over the map. Warmer colors mean lower energy -> higher confidence.
 - Average heatmap across all angles - Build the heatmap by averaging confidence over all orientations
 
 VISUAL INDICATORS:
 - Red dots - Sample positions where patterns were captured
-- Blue robot - Ground truth position (your actual position)
+- Cat image - Ground truth position (your actual position)
 - Green dot - Estimated position (network's prediction)
 - Purple line - Estimated orientation direction
 - Blue viewing cone - Robot's current field of view
@@ -132,47 +137,34 @@ DISPLAY PANELS:
 - Retrieved Memory - The closest matching stored pattern
 - Confidence - Confidence score of the match (0-100%)
 
+WAYS TO TRAIN THE NETWORK:
+
+STANDARD SAMPLING ("Sample & Train"):
+1. The robot visits a grid of positions.
+2. At each spot, it takes a picture (observation).
+3. It stores EVERY picture directly in memory.
+4. Pros: Very fast training (instant), guaranteed to have exact matches.
+5. Cons: Uses a lot of memory, can be slow to query if map is huge.
+
 SGD TRAINING:
-The "Train using SGD" button initiates an auto-exploration and training process:
 1. The robot automatically visits a grid of positions across the map.
 2. At each position, it captures observations from multiple angles.
 3. These observations are used to train the Modern Hopfield Network prototypes 
    using Stochastic Gradient Descent (SGD).
-4. The goal is to minimize the difference between the stored prototypes and 
-   the actual observations at their respective positions.
-5. This results in more robust localization compared to simple sampling.
+4. Random subset of observations is used as the initial memories.
+5. All observations are used to train the stored memories to fit the observations as
+   best as possible and cluster them together.
+6. This results in more positions being represented by a single memory, resulting
+   in storing more camera observations as one memory, clustering them and effectively
+   approximating the position of these observations.
 
 CONVERGENCE MODE:
 The "Converge to Pattern" button applies the Modern Hopfield Network update rule 
 iteratively on the current observation embedding. The update rule is:
   x^(t+1) = softmax(β * M^T * x^(t)) * M
-This demonstrates how the network converges to stored memory patterns through 
-iterative refinement in the embedding space. Each convergence step is visualized 
-as a horizontal strip in the top-left corner, showing how the observation evolves 
-toward a stored pattern. The final step is highlighted in green.
-
-HOW IT WORKS:
-This project uses a Modern Hopfield Network (MHN) for robot localization.
-The core idea is to store "memories" of what the world looks like from different 
-positions, and then use those memories to figure out where the robot is.
-
-There are two ways to teach the network:
-
-1. STANDARD SAMPLING ("Sample & Train"):
-   - The robot visits a grid of positions.
-   - At each spot, it takes a picture (observation).
-   - It stores EVERY picture directly in memory.
-   - Pros: Very fast training (instant), guaranteed to have exact matches.
-   - Cons: Uses a lot of memory, can be slow to query if map is huge.
-
-2. SGD TRAINING ("Train using SGD"):
-   - The robot also visits a grid of positions to collect data.
-   - BUT, instead of storing everything, it initializes a smaller set of 
-     random "prototypes".
-   - It uses Stochastic Gradient Descent (SGD) to move these prototypes 
-     around until they best represent the clusters of visual information.
-   - Pros: Much more efficient (uses fewer patterns).
-   - Cons: Training takes longer (iterative process).
+This demonstrates how the network converges to stored memory patterns.
+Each convergence step is visualized as a horizontal strip in the top-left corner,
+showing how the observation converges to a stored pattern.
 
 LOCALIZATION PROCESS:
 1. The robot sees something (Query).
@@ -181,5 +173,3 @@ LOCALIZATION PROCESS:
 4. The robot's position is estimated as the weighted average of the 
    positions of these best matches.
 """
-
-RETRAINING_REQUIRED_MSG = "⚠️ Retraining required"
