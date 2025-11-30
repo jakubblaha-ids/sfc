@@ -91,46 +91,46 @@ GETTING STARTED:
 4. Watch the network predict the robot's position (green dot)
 
 KEYBOARD CONTROLS:
-• W/A/S/D - Move robot up/left/down/right
-• J/L - Rotate robot left/right
+- W/A/S/D - Move robot up/left/down/right
+- J/L - Rotate robot left/right
 
 TOOLBAR BUTTONS:
-• Edit Map - Open map editor to draw custom maps
-• Import Map - Load a map from a PNG file
-• Export Map - Save the current map to a PNG file
-• Sample & Train - Generate observation samples and train the network
-• Train using SGD - Collect grid samples and train prototypes using SGD
-• Converge to Pattern - Iteratively move robot toward best matching pattern
-• Help - Show this help dialog
+- Edit Map - Open map editor to draw custom maps
+- Import Map - Load a map from a PNG file
+- Export Map - Save the current map to a PNG file
+- Sample & Train - Generate observation samples and train the network
+- Train using SGD - Collect grid samples and train prototypes using SGD
+- Converge to Pattern - Iteratively move robot toward best matching pattern
+- Help - Show this help dialog
 
 SETTINGS:
-• Blur Radius - Amount of blur applied to camera observations
-• Field of View - Viewing angle of the robot's camera (30-360°)
-• Number of Camera Rays - Number of rays captured (controls embedding dimension: rays × 3)
-• Visibility Index - How far the robot can see (0.01-1.0)
-• Beta (Inverse Temp) - Sharpness of retrieval (higher = more selective)
-• Combine top k matches - Number of closest matches to average for prediction
-• Number of Angles per Location - Number of orientations sampled at each training position
-• Noise Settings - Add random circular obstacles to the map
-• Interleaved RGB encoding - Alternative pattern encoding method
+- Blur Radius - Amount of blur applied to camera observations
+- Field of View - Viewing angle of the robot's camera (30-360°)
+- Number of Camera Rays - Number of rays captured (controls embedding dimension: rays × 3)
+- Visibility Index - How far the robot can see (0.01-1.0)
+- Beta (Inverse Temp) - Sharpness of retrieval (higher = more selective)
+- Combine top k matches - Number of closest matches to average for prediction
+- Number of Angles per Location - Number of orientations sampled at each training position
+- Noise Settings - Add random circular obstacles to the map
+- Interleaved RGB encoding - Alternative pattern encoding method
 
 CONFIDENCE STATISTICS:
-• Show confidence computation positions - Display test positions (blue dots)
-• Show confidence heatmap - Overlay confidence values across the map
-• Average heatmap across all angles - Build the heatmap by averaging confidence over all orientations
+- Show confidence computation positions - Display test positions (blue dots)
+- Show confidence heatmap - Overlay confidence values across the map
+- Average heatmap across all angles - Build the heatmap by averaging confidence over all orientations
 
 VISUAL INDICATORS:
-• Red dots - Sample positions where patterns were captured
-• Blue robot - Ground truth position (your actual position)
-• Green dot - Estimated position (network's prediction)
-• Purple line - Estimated orientation direction
-• Blue viewing cone - Robot's current field of view
-• Black lines - Connections between top-k matches and final prediction
+- Red dots - Sample positions where patterns were captured
+- Blue robot - Ground truth position (your actual position)
+- Green dot - Estimated position (network's prediction)
+- Purple line - Estimated orientation direction
+- Blue viewing cone - Robot's current field of view
+- Black lines - Connections between top-k matches and final prediction
 
 DISPLAY PANELS:
-• Current Input - What the robot currently sees
-• Retrieved Memory - The closest matching stored pattern
-• Similarity Metric - Confidence score of the match (0-100%)
+- Current Input - What the robot currently sees
+- Retrieved Memory - The closest matching stored pattern
+- Confidence - Confidence score of the match (0-100%)
 
 SGD TRAINING:
 The "Train using SGD" button initiates an auto-exploration and training process:
