@@ -60,13 +60,9 @@ class HeatmapBuilder:
         if not grid_positions or not grid_confidences:
             return None
 
-        # For energy values, we need to handle potentially negative values
         if invert_values:
-            # Find min and max for normalization
             min_val = min(grid_confidences)
             max_val = max(grid_confidences)
-            # Invert: low values become high, high values become low
-            # Then normalize to 0-1 range
             if max_val != min_val:
                 grid_confidences = [(max_val - val) / (max_val - min_val)
                                     for val in grid_confidences]
@@ -74,19 +70,14 @@ class HeatmapBuilder:
                 grid_confidences = [0.5 for _ in grid_confidences]
             max_confidence = 1.0
         else:
-            # Get max confidence for normalization
             max_confidence = max(grid_confidences) if grid_confidences else 1.0
 
-        # Use scipy's griddata for smooth interpolation at lower resolution
         confidence_grid = self._populate_grid_interpolated(
             grid_positions, grid_confidences, max_confidence)
 
-        # Apply Gaussian smoothing for even smoother gradient
-        # Scale sigma proportionally to the resolution
         scaled_sigma = sigma * self.resolution_scale
         smoothed_grid = gaussian_filter(confidence_grid, sigma=scaled_sigma)
 
-        # Apply colormap and create RGBA image at low resolution
         heatmap_image = self._apply_colormap(
             smoothed_grid,
             colormap_name,
@@ -95,7 +86,6 @@ class HeatmapBuilder:
             threshold
         )
 
-        # Upscale the heatmap to full resolution using smooth interpolation
         if self.resolution_scale < 1.0:
             heatmap_image = heatmap_image.resize(
                 (self.map_width, self.map_height),
@@ -194,15 +184,11 @@ class HeatmapBuilder:
         Returns:
             2D numpy array with interpolated values
         """
-        # Extract x, y coordinates and normalized confidence values
-        # Scale positions to match the lower resolution grid
         points = np.array(grid_positions) * self.resolution_scale
         values = np.array(grid_confidences) / max_confidence
 
-        # Create grid of points where we want to interpolate (at lower resolution)
         grid_y, grid_x = np.mgrid[0:self.heatmap_height, 0:self.heatmap_width]
 
-        # Use linear interpolation (much faster than cubic and still smooth after Gaussian blur)
         confidence_grid = griddata(
             points, values, (grid_x, grid_y),
             method='linear',
@@ -232,30 +218,20 @@ class HeatmapBuilder:
         Returns:
             PIL Image in RGBA mode
         """
-        # Use matplotlib's colormap to convert values to colors
-        # 'jet': blue (low) -> cyan -> green -> yellow -> red (high)
-        # Other good options: 'viridis', 'plasma', 'inferno', 'hot', 'coolwarm'
         colormap = cm.get_cmap(colormap_name)
 
-        # Apply colormap to the smoothed grid
-        # This returns RGBA values in range [0, 1]
         heatmap_rgba = colormap(smoothed_grid)
 
-        # Convert to 8-bit RGBA (0-255)
         heatmap_colored = (heatmap_rgba * 255).astype(np.uint8)
 
-        # Adjust alpha channel based on confidence values
-        # Make it more visible with higher base alpha and stronger scaling
         if threshold is not None:
             mask = smoothed_grid > threshold
         else:
             mask = smoothed_grid > 0.0
-        # Base alpha + scaled alpha based on confidence
         alpha_values = np.clip(
             alpha_base + smoothed_grid * alpha_scale, 0, 255
         ).astype(np.uint8)
         heatmap_colored[:, :, 3] = np.where(mask, alpha_values, 0)
 
-        # Create PIL image
         heatmap_image = Image.fromarray(heatmap_colored, mode='RGBA')
         return heatmap_image
