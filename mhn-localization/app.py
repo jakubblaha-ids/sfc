@@ -673,26 +673,30 @@ class App:
             print(f"Failed to load robot image: {e}")
             self.robot_image = None
 
+    def _load_and_process_map(self, file_path):
+        """Load and process a map image from a file path."""
+        imported_image = Image.open(file_path)
+
+        if imported_image.size != (MAP_WIDTH, MAP_HEIGHT):
+            imported_image = imported_image.resize(
+                (MAP_WIDTH, MAP_HEIGHT),
+                Image.Resampling.LANCZOS
+            )
+
+        if imported_image.mode != "RGB":
+            imported_image = imported_image.convert("RGB")
+
+        return imported_image
+
     def load_last_map(self):
         last_path = self.config.get_last_map_path()
 
         if last_path and os.path.exists(last_path):
             try:
-                imported_image = Image.open(last_path)
-
-                if imported_image.size != (MAP_WIDTH, MAP_HEIGHT):
-                    imported_image = imported_image.resize(
-                        (MAP_WIDTH, MAP_HEIGHT),
-                        Image.Resampling.LANCZOS
-                    )
-
-                if imported_image.mode != "RGB":
-                    imported_image = imported_image.convert("RGB")
-
-                self.canvas_state.current_map_image = imported_image
+                self.canvas_state.current_map_image = self._load_and_process_map(last_path)
                 print(f"Loaded last map: {last_path}")
 
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 print(f"Failed to load last map: {e}")
 
     def import_map(self):
@@ -712,18 +716,7 @@ class App:
 
         if file_path:
             try:
-                imported_image = Image.open(file_path)
-
-                if imported_image.size != (MAP_WIDTH, MAP_HEIGHT):
-                    imported_image = imported_image.resize(
-                        (MAP_WIDTH, MAP_HEIGHT),
-                        Image.Resampling.LANCZOS
-                    )
-
-                if imported_image.mode != "RGB":
-                    imported_image = imported_image.convert("RGB")
-
-                self.canvas_state.current_map_image = imported_image
+                self.canvas_state.current_map_image = self._load_and_process_map(file_path)
                 if self.apply_noise.get():
                     self.renderer.update_map_with_noise(self.canvas_state)
                 self.update_map_display()
@@ -733,7 +726,7 @@ class App:
                 self.status_label[
                     'text'] = f"✓ Map imported successfully from {os.path.basename(file_path)}"
 
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 self.status_label['text'] = f"❌ Failed to import map: {str(e)}"
 
     def export_map(self):
@@ -764,30 +757,29 @@ class App:
 
                 self.status_label['text'] = f"✓ Map exported to {
                     os.path.basename(file_path)} "
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 self.status_label['text'] = f"❌ Failed to export map: {str(e)}"
 
     def sample_and_train(self):
         """
         Automatically generate samples and train the network.
         """
-        self.auto_sample(show_message=False)
+        self.auto_sample()
 
-        if self.localization.get_num_samples() > 0:
-            self.train_network(show_message=False)
+        if self.localization.get_num_samples() == 0:
+            return
 
-            self.status_label['text'] = f"✓ Generated {
-                self.localization.get_num_samples()}  samples and trained network with {
-                self.localization.get_num_samples()}  patterns"
+        self.train_network()
 
-    def auto_sample(self, show_message=True):
+        self.status_label['text'] = f"✓ Generated {
+            self.localization.get_num_samples()}  samples and trained network with {
+            self.localization.get_num_samples()}  patterns"
+
+    def auto_sample(self):
         """
         Automatically generate samples from the current map.
         Samples at discrete positions with SAMPLE_STRIDE spacing and
         SAMPLE_ROTATIONS rotations at each position.
-
-        Args:
-            show_message: Whether to show success message (default True)
         """
         self.localization.clear_samples()
 
@@ -795,8 +787,6 @@ class App:
         total_samples = len(sample_positions)
 
         original_state = self.robot.copy_state()
-
-        self.status_label['text'] = f"Sampling: 0/{total_samples}"
 
         map_image = self.get_map_for_raytracing()
 
@@ -806,6 +796,8 @@ class App:
 
         self.robot.restore_state(original_state)
         self.update_map_display()
+
+        self.status_label['text'] = f"✓ Generated {total_samples} samples."
 
     def start_auto_exploration(self):
         """
@@ -824,6 +816,7 @@ class App:
             "How many patterns (prototypes) should the network learn?",
             parent=self.root, minvalue=1, maxvalue=total_samples, initialvalue=min(100, total_samples // 10)
         )
+
         if num_patterns is None:
             return
 
@@ -895,12 +888,9 @@ class App:
         plt.grid(True)
         plt.show(block=False)
 
-    def train_network(self, show_message=True):
+    def train_network(self):
         """
         Train the Modern Hopfield Network using the collected samples.
-
-        Args:
-            show_message: Whether to show success message (default True)
         """
         if self.localization.get_num_samples() == 0:
             self.status_label['text'] = NO_SAMPLES_MSG
@@ -915,16 +905,13 @@ class App:
             self.confidence.reset()
             self.compute_average_confidence()
 
-            if show_message:
-                if self.confidence.average_confidence is not None:
-                    self.status_label['text'] = f"✓ Network trained with {
-                        self.localization.get_num_samples()}  patterns. Avg confidence: {
-                        self.confidence.average_confidence * 100: .1f} %"
-                else:
-                    self.status_label['text'] = f"✓ Network trained with {
-                        self.localization.get_num_samples()}  patterns."
+            if self.confidence.average_confidence is not None:
+                self.status_label['text'] = f"✓ Network trained with {
+                    self.localization.get_num_samples()}  patterns. Avg confidence: {
+                    self.confidence.average_confidence * 100: .1f} %"
             else:
-                self.status_label['text'] = ""
+                self.status_label['text'] = f"✓ Network trained with {
+                    self.localization.get_num_samples()}  patterns."
         else:
             self.status_label['text'] = TRAINING_ERROR_MSG
 
