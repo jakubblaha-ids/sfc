@@ -27,17 +27,18 @@ class CanvasRenderer:
 
     def update_map_with_noise(self, state: CanvasState):
         """Create a cached map with noise applied for raytracing"""
-        if state.apply_noise and len(state.noise_circles) > 0:
-            state.map_with_noise = state.current_map_image.copy()
-            draw = ImageDraw.Draw(state.map_with_noise)
-            for x, y, radius in state.noise_circles:
-                draw.ellipse(
-                    [x - radius, y - radius, x + radius, y + radius],
-                    fill='black',
-                    outline='black'
-                )
-        else:
+        if not state.apply_noise or len(state.noise_circles) == 0:
             state.map_with_noise = None
+            return
+
+        state.map_with_noise = state.current_map_image.copy()
+        draw = ImageDraw.Draw(state.map_with_noise)
+        for x, y, radius in state.noise_circles:
+            draw.ellipse(
+                [x - radius, y - radius, x + radius, y + radius],
+                fill='black',
+                outline='black'
+            )
 
     def get_map_for_raytracing(self, state: CanvasState) -> Image.Image:
         """Get the appropriate map for raytracing (with or without noise)"""
