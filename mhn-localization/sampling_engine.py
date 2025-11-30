@@ -32,7 +32,7 @@ class SamplingEngine:
         half_stride = max(0, stride // 2)
         x_positions = list(range(half_stride, MAP_WIDTH, stride))
         y_positions = list(range(half_stride, MAP_HEIGHT, stride))
-        
+
         grid = []
         for x in x_positions:
             for y in y_positions:
@@ -52,7 +52,7 @@ class SamplingEngine:
         """
         grid = self._generate_grid(self.stride)
         angles = self._generate_angles()
-        
+
         positions = []
         for x, y in grid:
             for angle in angles:

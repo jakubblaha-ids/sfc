@@ -12,10 +12,8 @@ from .sampling_engine import SamplingEngine
 from .confidence_analyzer import ConfidenceAnalyzer
 from .canvas_state import CanvasState
 from .canvas_renderer import CanvasRenderer
-from .utils import embedding_to_image
 import math
 import os
-import numpy as np
 from .convergence_controller import ConvergenceController
 import random
 from tkinter import simpledialog
@@ -171,7 +169,6 @@ class App:
         )
         self.auto_explore_btn.pack(side=tk.LEFT, padx=5)
 
-        # Add convergence button
         self.converge_btn = ttk.Button(
             self.toolbar_frame,
             text="Converge to Pattern",
@@ -201,12 +198,6 @@ class App:
 
         self.map_canvas.bind('<Motion>', self.on_canvas_hover)
         self.map_canvas.bind('<Configure>', self.on_map_canvas_resize)
-
-        self.map_canvas.create_text(
-            MAP_WIDTH // 2, MAP_HEIGHT // 2,
-            text=f"Map Area ({MAP_WIDTH}x{MAP_HEIGHT})",
-            fill="gray"
-        )
 
     def create_right_panel(self):
         right_panel_container = ttk.Frame(self.content_frame, width=400)
@@ -247,7 +238,7 @@ class App:
         )
         self.memory_canvas.pack(fill=tk.X, padx=5, pady=5)
 
-        sim_frame = tk.LabelFrame(self.right_panel, text="Similarity Metric")
+        sim_frame = tk.LabelFrame(self.right_panel, text="Confidence")
         sim_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.sim_label = ttk.Label(
@@ -314,6 +305,7 @@ class App:
         visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.visibility_value_label = ttk.Label(
+            # TODO this
             visibility_container, text=f"{self.camera.visibility_index:.2f}", anchor="w"
         )
         self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
@@ -365,16 +357,16 @@ class App:
         num_angles_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.num_angles_value_label = ttk.Label(
+            # TODO this
             num_angles_container, text=f"{self._num_angles}", anchor="w"
         )
         self.num_angles_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
+        slider_position = VALID_NUM_ANGLES.index(self._num_angles) if self._num_angles in VALID_NUM_ANGLES else 2
         self.num_angles_slider = ttk.Scale(
             num_angles_container, from_=0, to=3, orient=tk.HORIZONTAL,
             command=self.on_num_angles_change
         )
-        valid_angles = [4, 8, 16, 32]
-        slider_position = valid_angles.index(self._num_angles) if self._num_angles in valid_angles else 2
         self.num_angles_slider.set(slider_position)
         self.num_angles_slider.pack(fill=tk.X, padx=5, pady=5)
 
@@ -384,6 +376,7 @@ class App:
         noise_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.noise_value_label = ttk.Label(
+            # TODO this
             noise_container, text=f"{int(self._noise_amount)} objects", anchor="w"
         )
         self.noise_value_label.pack(side=tk.LEFT, padx=5, pady=5)
@@ -483,6 +476,7 @@ class App:
         if self.show_confidence_heatmap.get():
             if not self.confidence.heatmap_computed:
                 self.compute_confidence_heatmap()
+
         self.update_map_display()
 
     def on_show_energy_heatmap_toggle(self):
@@ -490,6 +484,7 @@ class App:
         if self.show_energy_heatmap.get():
             if not self.confidence.heatmap_computed:
                 self.compute_confidence_heatmap()
+
         self.update_map_display()
 
     def on_average_heatmap_toggle(self):
@@ -513,17 +508,16 @@ class App:
     def on_num_rays_change(self, value):
         """Handle number of rays slider change"""
         num_rays = int(float(value))
-        self._num_rays = num_rays
         embedding_dim = num_rays * 3
+
+        self._num_rays = num_rays
         self.num_rays_value_label.config(text=f"{num_rays} rays (embedding dim: {embedding_dim})")
         self.config.set("num_rays", num_rays)
 
         self.camera.camera_samples = num_rays
 
-        if self.localization.is_trained:
-            self.status_label['text'] = "⚠️ Retraining required: Changing the number of rays requires retraining. Click 'Sample & Train' again."
-        else:
-            self.update_map_display()
+        self._ensure_retrain()
+        self.update_map_display()
 
     def on_visibility_change(self, value):
         """Handle visibility index slider change"""
@@ -539,6 +533,7 @@ class App:
         self.beta_value_label.config(text=f"{beta:.1f}")
         self.localization.update_beta(beta)
         self.config.set("beta", beta)
+
         if self.localization.is_trained:
             self.update_map_display()
 
@@ -547,33 +542,35 @@ class App:
         self.top_k = int(float(value))
         self.top_k_value_label.config(text=f"{self.top_k}")
         self.config.set("top_k", self.top_k)
+
         if self.localization.is_trained:
             self.localize()
             self.update_map_display()
 
     def on_num_angles_change(self, value):
         """Handle number of angles slider change"""
-        valid_angles = [4, 8, 16, 32]
         slider_position = int(round(float(value)))
         slider_position = max(0, min(3, slider_position))
 
-        num_angles = valid_angles[slider_position]
+        num_angles = VALID_NUM_ANGLES[slider_position]
 
         self._num_angles = num_angles
         self.num_angles_value_label.config(text=f"{self._num_angles}")
         self.config.set("num_angles", self._num_angles)
 
-        # Update the sampling engine with new number of angles
-        self.sampling = SamplingEngine(num_rotations=self._num_angles)
+        self.sampling.num_rotations = self._num_angles
 
-        if self.localization.is_trained:
-            self.status_label['text'] = "⚠️ Retraining required: Changing the number of angles requires retraining. Click 'Sample & Train' again."
+        self._ensure_retrain()
 
     def on_interleaved_rgb_toggle(self):
         """Handle interleaved RGB checkbox toggle"""
         self.config.set("interleaved_rgb", self.interleaved_rgb.get())
+        self._ensure_retrain()
+
+    def _ensure_retrain(self):
+        """Update status if retraining is required"""
         if self.localization.is_trained:
-            self.status_label['text'] = "⚠️ Retraining required: Changing RGB encoding requires retraining. Click 'Sample & Train' again."
+            self.status_label['text'] = RETRAINING_REQUIRED_MSG
 
     def on_noise_change(self, value):
         """Handle noise amount slider change"""
