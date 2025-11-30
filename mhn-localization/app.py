@@ -904,19 +904,20 @@ class App:
 
         success = self.localization.train()
 
-        if success:
-            self.confidence.reset()
-            self.compute_average_confidence()
-
-            if self.confidence.average_confidence is not None:
-                self.set_status(f"✓ Network trained with {
-                    self.localization.get_num_samples()}  patterns. Avg confidence: {
-                    self.confidence.average_confidence * 100: .1f} %")
-            else:
-                self.set_status(f"✓ Network trained with {
-                    self.localization.get_num_samples()}  patterns.")
-        else:
+        if not success:
             self.set_status(TRAINING_ERROR_MSG)
+            return
+
+        self.confidence.reset()
+        self.compute_average_confidence()
+
+        if self.confidence.average_confidence is not None:
+            self.set_status(f"✓ Network trained with {
+            self.localization.get_num_samples()}  patterns. Avg confidence: {
+            self.confidence.average_confidence * 100: .1f} %")
+        else:
+            self.set_status(f"✓ Network trained with {
+            self.localization.get_num_samples()}  patterns.")
 
     def compute_average_confidence(self, num_tests=None):
         """
