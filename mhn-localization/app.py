@@ -182,7 +182,7 @@ class App:
         self.converge_btn = ttk.Button(
             self.toolbar_frame,
             text="Converge to Pattern",
-            command=self.start_convergence
+            command=self.handle_convergence_btn
         )
         self.converge_btn.pack(side=tk.LEFT, padx=5)
 
@@ -1258,14 +1258,16 @@ class App:
 
         self.root.after(self.update_interval, self.update_loop)
 
-    def start_convergence(self):
+    def handle_convergence_btn(self):
         """Start the convergence process using MHN update rule on embedding"""
         if self.convergence_controller.is_converging:
             self.convergence_controller.stop_convergence()
-        else:
-            started = self.convergence_controller.start_convergence(self.current_camera_view)
-            if started:
-                self.converge_btn.config(text="Stop Convergence")
+            return
+
+        started = self.convergence_controller.start_convergence(self.current_camera_view)
+
+        if started:
+            self.converge_btn.config(text="Stop Convergence")
 
     def clear_convergence(self):
         """Clear convergence visualization from the canvas but keep the final red circle"""
