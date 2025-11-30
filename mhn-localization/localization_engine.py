@@ -42,7 +42,7 @@ class LocalizationEngine:
             angle: Angle in degrees
             camera_view: PIL Image of camera view
         """
-        embedding = self._create_embedding(camera_view)
+        embedding = self.create_embedding(camera_view)
 
         self.sample_positions.append((x, y, angle))
         self.sample_embeddings.append(embedding)
@@ -154,7 +154,7 @@ class LocalizationEngine:
         if camera_view is None:
             return None
 
-        query_embedding = self._create_embedding(camera_view)
+        query_embedding = self.create_embedding(camera_view)
 
         # Use current sample positions
         reference_positions = self.sample_positions
@@ -318,7 +318,7 @@ class LocalizationEngine:
         if self.hopfield_network is not None:
             self.hopfield_network.beta = beta
 
-    def _create_embedding(self, camera_view):
+    def create_embedding(self, camera_view):
         """
         Create an embedding vector from a camera view image.
 

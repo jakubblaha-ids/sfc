@@ -93,10 +93,9 @@ class App:
             self.localization,
             self.canvas_state,
             self.set_status,
-            self.update_map_display
+            self.update_map_display,
+            on_convergence_finished=lambda: self.converge_btn.config(text="Converge to Pattern")
         )
-        self.convergence_controller.on_convergence_finished = lambda: self.converge_btn.config(
-            text="Converge to Pattern")
 
         self.keys_pressed = set()
         self.update_interval = 16

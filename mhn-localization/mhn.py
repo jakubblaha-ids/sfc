@@ -2,11 +2,6 @@ import numpy as np
 
 
 class ModernHopfieldNetwork:
-    """
-    Modern Hopfield Network for pattern retrieval.
-    Implements continuous Modern Hopfield Network energy function/update rule.
-    """
-
     def __init__(self, embedding_dim, beta=1.0):
         """
         Initialize the Modern Hopfield Network.

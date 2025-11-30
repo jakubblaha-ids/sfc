@@ -2,12 +2,12 @@ import numpy as np
 from .utils import embedding_to_image
 
 class ConvergenceController:
-    def __init__(self, localization_engine, canvas_state, status_callback, update_display_callback):
+    def __init__(self, localization_engine, canvas_state, status_callback, update_display_callback, on_convergence_finished=None):
         self.localization = localization_engine
         self.canvas_state = canvas_state
         self.status_callback = status_callback
         self.update_display_callback = update_display_callback
-        self.on_convergence_finished = None
+        self.on_convergence_finished = on_convergence_finished
         
         self.is_converging = False
         self.convergence_step = 0
@@ -18,7 +18,7 @@ class ConvergenceController:
     def start_convergence(self, current_camera_view):
         """Start the convergence process using MHN update rule on embedding"""
         if not self.localization.is_trained:
-            self.status_callback("⚠️ Network not trained. Please use 'Sample & Train' first.")
+            self.status_callback("⚠️ Network not trained.")
             return False
 
         if self.is_converging:
@@ -33,7 +33,7 @@ class ConvergenceController:
             self.canvas_state.converged_position = None
             
             # Initialize with current camera view
-            self.convergence_embedding = self.localization._create_embedding(current_camera_view)
+            self.convergence_embedding = self.localization.create_embedding(current_camera_view)
             self.convergence_history = [self.convergence_embedding.copy()]
             
             # Add initial embedding as first strip
