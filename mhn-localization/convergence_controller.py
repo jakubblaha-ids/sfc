@@ -22,7 +22,6 @@ class ConvergenceController:
             return False
 
         if self.is_converging:
-            # Stop convergence
             self.stop_convergence()
             return False
         else:

@@ -15,6 +15,7 @@ class ModernHopfieldNetwork:
         # Matrix of stored patterns (N_patterns x embedding_dim)
         self.memory = None
         self.memory_normalized = None  # Normalized patterns for cosine similarity
+        self.memory_associated_data = None  # Associated data (e.g., positions)
         self.num_patterns = 0
 
     def train(self, patterns):
@@ -47,15 +48,15 @@ class ModernHopfieldNetwork:
         print(
             f"Training complete: {self.num_patterns} patterns stored and normalized")
 
-    def train_sgd(self, observations, associated_data=None, num_patterns=None, learning_rate=0.01, epochs=100, batch_size=32, progress_callback=None):
+    def train_sgd(self, observations, associated_data, num_patterns=None, learning_rate=0.01, epochs=100, batch_size=32, progress_callback=None):
         """
         Train the network using Gradient Descent to minimize energy on observations.
         This learns optimal patterns (prototypes) that represent the data.
-        Also updates associated data (e.g., positions) if provided.
+        Also updates associated data (e.g., positions).
 
         Args:
             observations: numpy array of shape (N_samples, embedding_dim)
-            associated_data: numpy array of shape (N_samples, data_dim) or None
+            associated_data: numpy array of shape (N_samples, data_dim)
             num_patterns: Number of patterns to learn. If None, uses len(observations)
             learning_rate: Learning rate for SGD
             epochs: Number of training epochs
@@ -66,6 +67,7 @@ class ModernHopfieldNetwork:
             list: History of average energy (loss) per epoch
         """
         observations = np.array(observations, dtype=np.float32)
+        associated_data = np.array(associated_data, dtype=np.float32)
         n_samples = len(observations)
         
         if num_patterns is None:
@@ -77,11 +79,8 @@ class ModernHopfieldNetwork:
         self.memory = observations[indices].copy()
         self.num_patterns = num_patterns
         
-        # Initialize associated data memory if provided
-        self.memory_associated_data = None
-        if associated_data is not None:
-            associated_data = np.array(associated_data, dtype=np.float32)
-            self.memory_associated_data = associated_data[indices].copy()
+        # Initialize associated data memory
+        self.memory_associated_data = associated_data[indices].copy()
         
         # Normalize initial memory
         norms = np.linalg.norm(self.memory, axis=1, keepdims=True)
@@ -95,13 +94,13 @@ class ModernHopfieldNetwork:
             # Shuffle data
             perm = np.random.permutation(n_samples)
             observations_shuffled = observations[perm]
-            if associated_data is not None:
-                associated_data_shuffled = associated_data[perm]
+            associated_data_shuffled = associated_data[perm]
             
             total_energy = 0
             
             for i in range(0, n_samples, batch_size):
                 batch = observations_shuffled[i:i+batch_size]
+                batch_assoc = associated_data_shuffled[i:i+batch_size]
                 
                 # Normalize batch
                 batch_norms = np.linalg.norm(batch, axis=1, keepdims=True)
@@ -151,18 +150,16 @@ class ModernHopfieldNetwork:
                 self.memory_normalized = self.memory # Since we just normalized it
                 
                 # Update associated data (positions)
-                if self.memory_associated_data is not None:
-                    batch_assoc = associated_data_shuffled[i:i+batch_size]
-                    # Gradient for associated data: pull towards associated data of attending samples
-                    # We want to minimize distance: E = 0.5 * sum(attn * ||data - mem||^2)
-                    # dE/dM = -sum(attn * (data - mem)) = sum(attn * data) - sum(attn) * mem
-                    
-                    weighted_sum_data = np.dot(attention.T, batch_assoc)
-                    sum_weights = np.sum(attention, axis=0, keepdims=True).T
-                    
-                    grad_assoc = weighted_sum_data - sum_weights * self.memory_associated_data
-                    
-                    self.memory_associated_data += learning_rate * grad_assoc / batch_size
+                # Gradient for associated data: pull towards associated data of attending samples
+                # We want to minimize distance: E = 0.5 * sum(attn * ||data - mem||^2)
+                # dE/dM = -sum(attn * (data - mem)) = sum(attn * data) - sum(attn) * mem
+                
+                weighted_sum_data = np.dot(attention.T, batch_assoc)
+                sum_weights = np.sum(attention, axis=0, keepdims=True).T
+                
+                grad_assoc = weighted_sum_data - sum_weights * self.memory_associated_data
+                
+                self.memory_associated_data += learning_rate * grad_assoc / batch_size
             
             avg_loss = total_energy / n_samples
             loss_history.append(avg_loss)

@@ -113,16 +113,9 @@ class LocalizationEngine:
                 progress_callback=progress_callback
             )
             
-            # Update internal state with trained prototypes
-            # 1. Update embeddings
             self.sample_embeddings = list(self.hopfield_network.memory)
+            self.sample_positions = [self._decode_position(p) for p in self.hopfield_network.memory_associated_data]
             
-            # 2. Update positions (decode from associated data)
-            if self.hopfield_network.memory_associated_data is not None:
-                self.sample_positions = [self._decode_position(p) for p in self.hopfield_network.memory_associated_data]
-            
-            # 3. Update views (approximate by using views from initialization indices)
-            # This is an approximation since the prototype has drifted, but it gives a visual reference
             new_views = []
             for idx in indices:
                 new_views.append(self.sample_views[idx])
