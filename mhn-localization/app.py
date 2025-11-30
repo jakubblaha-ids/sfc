@@ -29,6 +29,8 @@ class App:
 
         self.config = ConfigManager()
 
+        self._suppress_updates = True
+
         # Load saved parameters or use defaults
         self._blur_radius = self.config.get("blur_radius", CAMERA_BLUR_RADIUS)
         self._fov = self.config.get("fov", CAMERA_FOV)
@@ -112,6 +114,10 @@ class App:
 
         if self._apply_noise:
             self.generate_noise_circles()
+
+        self.initialize_ui_values()
+        self._suppress_updates = False
+        self.update_map_display()
 
         self.root.bind('<KeyPress-w>', lambda e: self.on_key_press('w'))
         self.root.bind('<KeyRelease-w>', lambda e: self.on_key_release('w'))
@@ -258,7 +264,7 @@ class App:
         blur_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.blur_value_label = ttk.Label(
-            blur_container, text=f"{self.camera.blur_radius:.1f}", anchor="w"
+            blur_container, anchor="w"
         )
         self.blur_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -273,7 +279,7 @@ class App:
         fov_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.fov_value_label = ttk.Label(
-            fov_container, text=f"{self.camera.cone_angle:.0f}°", anchor="w"
+            fov_container, anchor="w"
         )
         self.fov_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -288,7 +294,7 @@ class App:
         num_rays_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.num_rays_value_label = ttk.Label(
-            num_rays_container, text=f"{self._num_rays} rays (embedding dim: {self._num_rays * 3})", anchor="w"
+            num_rays_container, anchor="w"
         )
         self.num_rays_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -305,8 +311,7 @@ class App:
         visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.visibility_value_label = ttk.Label(
-            # TODO this
-            visibility_container, text=f"{self.camera.visibility_index:.2f}", anchor="w"
+            visibility_container, anchor="w"
         )
         self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -323,7 +328,7 @@ class App:
         beta_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.beta_value_label = ttk.Label(
-            beta_container, text=f"{self._beta:.1f}", anchor="w"
+            beta_container, anchor="w"
         )
         self.beta_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -340,7 +345,7 @@ class App:
         top_k_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.top_k_value_label = ttk.Label(
-            top_k_container, text=f"{self._top_k}", anchor="w"
+            top_k_container, anchor="w"
         )
         self.top_k_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -357,8 +362,7 @@ class App:
         num_angles_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.num_angles_value_label = ttk.Label(
-            # TODO this
-            num_angles_container, text=f"{self._num_angles}", anchor="w"
+            num_angles_container, anchor="w"
         )
         self.num_angles_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -376,8 +380,7 @@ class App:
         noise_container.pack(fill=tk.X, padx=5, pady=5)
 
         self.noise_value_label = ttk.Label(
-            # TODO this
-            noise_container, text=f"{int(self._noise_amount)} objects", anchor="w"
+            noise_container, anchor="w"
         )
         self.noise_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
@@ -441,6 +444,20 @@ class App:
             command=self.on_average_heatmap_toggle
         )
         self.average_heatmap_checkbox.pack(fill=tk.X, padx=5, pady=5)
+
+    def initialize_ui_values(self):
+        """Initialize UI values by calling update functions"""
+        self.on_blur_change(self._blur_radius)
+        self.on_fov_change(self._fov)
+        self.on_num_rays_change(self._num_rays)
+        self.on_visibility_change(self._visibility_index)
+        self.on_beta_change(self._beta)
+        self.on_top_k_change(self._top_k)
+
+        slider_position = VALID_NUM_ANGLES.index(self._num_angles) if self._num_angles in VALID_NUM_ANGLES else 2
+        self.on_num_angles_change(slider_position)
+
+        self.on_noise_change(self._noise_amount)
 
     def show_help(self):
         """Display a help dialog with information about controls and features"""
@@ -1004,6 +1021,9 @@ class App:
 
     def update_map_display(self):
         """Update the map canvas display using the renderer."""
+        if self._suppress_updates:
+            return
+
         self.capture_camera_view()
         self.display_camera_view()
 
