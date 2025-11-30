@@ -7,6 +7,35 @@ class ConfidenceAnalyzer:
     Analyzes localization confidence across the map.
     Computes average confidence, heatmaps, and evaluation metrics.
     Pure logic class without any UI dependencies.
+    
+    Mathematical Background:
+    ------------------------
+    Confidence is computed using the Modern Hopfield Network's softmax attention mechanism.
+    
+    Given a query embedding q in R^d and memory patterns M = {m_1, m_2, ..., m_N} in R^d:
+    
+    1. Normalize all vectors:
+       q_norm = q / ||q||_2
+       m_norm_i = m_i / ||m_i||_2
+    
+    2. Compute cosine similarities:
+       s_i = q_norm^T * m_norm_i  (dot product of normalized vectors)
+    
+    3. Scale similarities by inverse temperature beta and dimension:
+       s_scaled_i = beta * s_i * sqrt(d)
+    
+    4. Compute softmax attention weights (confidence values):
+       alpha_i = exp(s_scaled_i) / sum_j(exp(s_scaled_j))
+    
+    The "confidence" returned by localization is alpha_best, where best = argmax(alpha_i).
+    This represents the probability mass assigned to the best matching pattern.
+    
+    Properties:
+    - Confidence in (0, 1) and sum_i(alpha_i) = 1
+    - Higher beta -> sharper distribution (more confident, winner-takes-all)
+    - Lower beta -> softer distribution (less confident, more uniform)
+    - High confidence (alpha_best ~ 1) means query is very similar to exactly one stored pattern
+    - Low confidence (alpha_best ~ 1/N) means query is equally similar to many patterns
     """
 
     def __init__(self, map_width, map_height):
@@ -34,6 +63,19 @@ class ConfidenceAnalyzer:
             self, test_positions, localization_callback):
         """
         Compute average retrieval confidence over a set of test positions.
+        
+        Mathematical Definition:
+        ------------------------
+        For a set of test positions T = {(x_1, y_1, theta_1), ..., (x_M, y_M, theta_M)}:
+        
+        Average Confidence = (1/M) * sum_k(alpha_k)
+        
+        where alpha_k is the confidence (softmax attention weight) for the best matching
+        pattern at test position k.
+        
+        This metric evaluates how well the system can localize from different positions:
+        - High average confidence (~1.0): The system can reliably distinguish positions
+        - Low average confidence (~1/N): The system struggles to localize (patterns are ambiguous)
 
         Args:
             test_positions: List of (x, y, angle) tuples to evaluate
@@ -73,6 +115,23 @@ class ConfidenceAnalyzer:
         """
         Pre-compute confidence and energy values at a dense grid of positions for each direction.
         Creates separate heatmaps for each angle.
+        
+        Mathematical Context:
+        ---------------------
+        For each grid point (x, y) and angle theta, we compute:
+        
+        1. Confidence map: C(x, y, theta) = max_i(alpha_i(x, y, theta))
+           where alpha_i are the softmax attention weights
+        
+        2. Energy map: E(x, y, theta) = -log(sum_i(exp(beta * s_i * sqrt(d))))
+           where s_i are cosine similarities to stored patterns
+        
+        The energy is the negative log-sum-exp (LSE) of scaled similarities:
+        - Lower energy -> better match to stored patterns
+        - Higher energy -> query is far from all stored patterns
+        
+        Relationship: E ~ -log(alpha_best) when alpha_best is dominant (high confidence)
+        Therefore: alpha_best ~ exp(-E)
 
         Args:
             grid_positions_by_angle: Dict mapping angle to list of (x, y) tuples
@@ -124,6 +183,18 @@ class ConfidenceAnalyzer:
                             colormap='jet', sigma=20.0):
         """
         Build a heatmap image for visualization.
+        
+        Visualization Notes:
+        --------------------
+        When average_all_angles=True, we compute:
+        
+        C_avg(x, y) = (1/K) * sum_k(C(x, y, theta_k))
+        
+        where K is the number of discretized angles and C(x, y, theta_k) is the confidence
+        at position (x, y) looking in direction theta_k.
+        
+        This averaged heatmap shows which positions are generally easy to localize from,
+        regardless of orientation. High values indicate positions with distinctive views.
 
         Args:
             current_angle: Current robot angle (used to find closest precomputed angle)
@@ -188,6 +259,23 @@ class ConfidenceAnalyzer:
         """
         Build an energy heatmap for visualization.
         Lower energy means better match (so we use inverted colormap by default).
+        
+        Energy Function Details:
+        ------------------------
+        The Modern Hopfield Network energy function is:
+        
+        E(q) = -log(sum_i(exp(beta * q_norm^T * m_norm_i * sqrt(d))))
+        
+        This is a smooth, convex energy function with the following properties:
+        
+        1. Global minimum: E_min occurs when q is closest to a stored pattern
+        2. Smooth landscape: Energy decreases as q approaches any stored pattern
+        
+        For visualization, we invert the energy (E -> -E or exp(-E)) so that:
+        - Bright regions = low energy = good localization
+        - Dark regions = high energy = poor localization
+        
+        The energy heatmap reveals the "basin of attraction" around each stored pattern.
 
         Args:
             current_angle: Current robot angle (used to find closest precomputed angle)
