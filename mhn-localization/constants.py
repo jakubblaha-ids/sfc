@@ -116,7 +116,7 @@ SETTINGS:
 - Blur Radius - Amount of blur applied to camera observations
 - Field of View - Viewing angle of the robot's camera
 - Number of Camera Rays - Number of rays captured (controls embedding dimension: rays × 3)
-- Visibility Index - How far the robot can see, lower values mean the robot can see further
+- Visibility Distance - Percentage of map width the robot can see clearly (100% = full map width, lower = shorter viewing distance with exponential fade)
 - Beta (Inverse Temp) - Sharpness of retrieval (higher = more selective)
 - Combine top k matches - Number of closest matches to average for prediction
 - Number of Angles per Location - Number of orientations sampled at each training position

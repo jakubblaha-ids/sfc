@@ -9,20 +9,19 @@ class CameraSimulator:
     Pure logic class without any UI dependencies.
     """
 
-    def __init__(self, cone_angle=90, cone_length=40, camera_samples=100,
-                 blur_radius=0.0, visibility_index=0.1):
+    def __init__(self, cone_angle=90, camera_samples=100,
+                 blur_radius=0.0, visibility_index=50.0):
         """
         Initialize camera simulator.
 
         Args:
             cone_angle: Field of view in degrees
-            cone_length: Maximum viewing distance
             camera_samples: Number of pixel samples in the 1D strip
             blur_radius: Gaussian blur radius for the camera view
-            visibility_index: Distance opacity factor (0.0 - 1.0)
+            visibility_index: Visibility percentage (0-100). At 100%, robot sees up to MAP_WIDTH distance.
+                            Lower values fade exponentially faster.
         """
         self.cone_angle = cone_angle
-        self.cone_length = cone_length
         self.camera_samples = camera_samples
         self.blur_radius = blur_radius
         self.visibility_index = visibility_index
@@ -46,7 +45,6 @@ class CameraSimulator:
         pixels = map_image.load()
 
         camera_strip = []
-        max_distance = self.cone_length
 
         for i in range(self.camera_samples):
             angle_offset = -half_cone + (self.cone_angle * i /
@@ -66,7 +64,15 @@ class CameraSimulator:
 
             color = pixels[pixel_x, pixel_y]
 
-            opacity = math.exp(-distance / max_distance * self.visibility_index)
+            # Convert visibility percentage to effective viewing distance
+            # At 100%, effective_distance = MAP_WIDTH
+            # At lower percentages, effective_distance is proportionally smaller
+            effective_distance = MAP_WIDTH * (self.visibility_index / 100.0)
+            
+            # Exponential fade based on distance relative to effective viewing distance
+            # When distance = effective_distance, opacity ≈ 0.37 (e^-1)
+            # When distance = 2 * effective_distance, opacity ≈ 0.14 (e^-2)
+            opacity = math.exp(-distance / effective_distance) if effective_distance > 0 else 0
 
             blended_color = (
                 int(color[0] * opacity),

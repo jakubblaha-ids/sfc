@@ -69,7 +69,6 @@ class CanvasState:
     # Current camera view for cone visualization
     current_camera_angle: float = 0.0
     camera_fov: float = 90.0
-    camera_cone_length: float = 40.0
 
     def image_to_canvas_coords(self, img_x: float, img_y: float) -> Tuple[float, float]:
         """Convert image coordinates to canvas coordinates"""

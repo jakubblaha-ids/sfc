@@ -34,7 +34,7 @@ class App:
         # Load saved parameters or use defaults
         self._blur_radius = self.config.get("blur_radius", CAMERA_BLUR_RADIUS)
         self._fov = self.config.get("fov", CAMERA_FOV)
-        self._visibility_index = self.config.get("visibility_index", 0.1)
+        self._visibility_index = self.config.get("visibility_index", 50.0)
         self._beta = self.config.get("beta", DEFAULT_BETA)
         self._top_k = self.config.get("top_k", DEFAULT_TOP_K)
         self._noise_amount = self.config.get("noise_amount", DEFAULT_NOISE_AMOUNT)
@@ -46,7 +46,6 @@ class App:
         self.robot = RobotState()
         self.camera = CameraSimulator(
             cone_angle=self._fov,
-            cone_length=40,
             camera_samples=self._num_rays,
             blur_radius=self._blur_radius,
             visibility_index=self._visibility_index
@@ -68,7 +67,6 @@ class App:
             robot_radius=self.robot.radius,
             apply_noise=self._apply_noise,
             camera_fov=self._fov,
-            camera_cone_length=40,
         )
 
         # UI-related state
@@ -310,7 +308,7 @@ class App:
         self.num_rays_slider.pack(fill=tk.X, padx=5, pady=5)
 
         visibility_container = tk.LabelFrame(
-            settings_frame, text="Visibility Index"
+            settings_frame, text="Visibility Distance"
         )
         visibility_container.pack(fill=tk.X, padx=5, pady=5)
 
@@ -320,7 +318,7 @@ class App:
         self.visibility_value_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.visibility_slider = ttk.Scale(
-            visibility_container, from_=0.01, to=1.0,
+            visibility_container, from_=1.0, to=100.0,
             orient=tk.HORIZONTAL, command=self.on_visibility_change
         )
         self.visibility_slider.set(self._visibility_index)
@@ -541,10 +539,10 @@ class App:
         self.update_map_display()
 
     def on_visibility_change(self, value):
-        """Handle visibility index slider change"""
+        """Handle visibility distance slider change"""
         self.camera.visibility_index = float(value)
         self.visibility_value_label.config(
-            text=f"{self.camera.visibility_index:.2f}")
+            text=f"{self.camera.visibility_index:.0f}%")
         self.config.set("visibility_index", self.camera.visibility_index)
         self.update_map_display()
 
