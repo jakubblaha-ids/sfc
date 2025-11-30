@@ -77,6 +77,11 @@ MAX_CONVERGENCE_ITERATIONS = 100
 
 # Messages
 RETRAINING_REQUIRED_MSG = "⚠️ Retraining required"
+NETWORK_NOT_TRAINED_MSG = "⚠️ Network not trained. Please use 'Sample & Train' first before computing confidence heatmap."
+NO_SAMPLES_MSG = "❌ No samples available. Please run 'Sample & Train' first."
+TRAINING_FAILED_MSG = "❌ Training failed."
+TRAINING_ERROR_MSG = "❌ Training error"
+EXPLORING_MSG = "⟳ Exploring... Collecting grid samples..."
 
 # Help text
 HELP_TEXT = """ROBOT LOCALIZATION VIA MODERN HOPFIELD NETWORKS

@@ -631,7 +631,7 @@ class App:
         Creates separate heatmaps for each of the SAMPLE_ROTATIONS angles.
         """
         if not self.localization.is_trained:
-            self.status_label['text'] = "⚠️ Network not trained. Please use 'Sample & Train' first before computing confidence heatmap."
+            self.status_label['text'] = NETWORK_NOT_TRAINED_MSG
             self.show_confidence_heatmap.set(False)
             return
 
@@ -827,7 +827,7 @@ class App:
         if num_patterns is None:
             return
 
-        self.status_label['text'] = "⟳ Exploring... Collecting grid samples..."
+        self.status_label['text'] = EXPLORING_MSG
         self.root.update()
 
         original_state = self.robot.copy_state()
@@ -875,7 +875,7 @@ class App:
             self.status_label['text'] = f"✓ Exploration complete! Learned {num_patterns} patterns from {total_samples} samples."
             self.show_training_stats(loss_history)
         else:
-            self.status_label['text'] = "❌ Training failed."
+            self.status_label['text'] = TRAINING_FAILED_MSG
 
         self.robot.restore_state(original_state)
         self.update_map_display()
@@ -903,7 +903,7 @@ class App:
             show_message: Whether to show success message (default True)
         """
         if self.localization.get_num_samples() == 0:
-            self.status_label['text'] = "❌ No samples available. Please run 'Sample & Train' first."
+            self.status_label['text'] = NO_SAMPLES_MSG
             return
 
         self.status_label['text'] = f"Training: 0/{
@@ -926,7 +926,7 @@ class App:
             else:
                 self.status_label['text'] = ""
         else:
-            self.status_label['text'] = "❌ Training error"
+            self.status_label['text'] = TRAINING_ERROR_MSG
 
     def compute_average_confidence(self, num_tests=None):
         """
