@@ -94,7 +94,7 @@ class App:
         self.convergence_controller = ConvergenceController(
             self.localization,
             self.canvas_state,
-            lambda msg: self.status_label.config(text=msg),
+            self.set_status,
             self.update_map_display
         )
         self.convergence_controller.on_convergence_finished = lambda: self.converge_btn.config(
@@ -135,6 +135,10 @@ class App:
             '<KeyPress-l>', lambda e: self.on_rotation_key_press('l'))
         self.root.bind('<KeyRelease-l>',
                        lambda e: self.on_rotation_key_release('l'))
+
+    def set_status(self, message):
+        """Set the status label text"""
+        self.status_label.config(text=message)
 
     def create_layout(self):
         self.main_container = ttk.Frame(self.root)
@@ -587,7 +591,7 @@ class App:
     def _ensure_retrain(self):
         """Update status if retraining is required"""
         if self.localization.is_trained:
-            self.status_label['text'] = RETRAINING_REQUIRED_MSG
+            self.set_status(RETRAINING_REQUIRED_MSG)
 
     def on_noise_change(self, value):
         """Handle noise amount slider change"""
@@ -631,7 +635,7 @@ class App:
         Creates separate heatmaps for each of the SAMPLE_ROTATIONS angles.
         """
         if not self.localization.is_trained:
-            self.status_label['text'] = NETWORK_NOT_TRAINED_MSG
+            self.set_status(NETWORK_NOT_TRAINED_MSG)
             self.show_confidence_heatmap.set(False)
             return
 
@@ -646,9 +650,9 @@ class App:
             grid_positions_by_angle, localization_callback)
 
         if result:
-            self.status_label['text'] = f"✓ Heatmap computed: {
+            self.set_status(f"✓ Heatmap computed: {
                 result['total_evaluations']}  positions across {
-                len(result['angles'])}  angles."
+                len(result['angles'])}  angles.")
 
     def open_map_editor(self):
         MapEditor(self.root, self.canvas_state.current_map_image, self.on_map_saved)
@@ -723,11 +727,10 @@ class App:
 
                 self.config.set_last_map_path(file_path)
 
-                self.status_label[
-                    'text'] = f"✓ Map imported successfully from {os.path.basename(file_path)}"
+                self.set_status(f"✓ Map imported successfully from {os.path.basename(file_path)}")
 
             except (OSError, ValueError) as e:
-                self.status_label['text'] = f"❌ Failed to import map: {str(e)}"
+                self.set_status(f"❌ Failed to import map: {str(e)}")
 
     def export_map(self):
         """Export the current map to a PNG file"""
@@ -755,10 +758,10 @@ class App:
 
                 self.config.set_last_map_path(file_path)
 
-                self.status_label['text'] = f"✓ Map exported to {
-                    os.path.basename(file_path)} "
+                self.set_status(f"✓ Map exported to {
+                    os.path.basename(file_path)} ")
             except (OSError, ValueError) as e:
-                self.status_label['text'] = f"❌ Failed to export map: {str(e)}"
+                self.set_status(f"❌ Failed to export map: {str(e)}")
 
     def sample_and_train(self):
         """
@@ -771,9 +774,9 @@ class App:
 
         self.train_network()
 
-        self.status_label['text'] = f"✓ Generated {
+        self.set_status(f"✓ Generated {
             self.localization.get_num_samples()}  samples and trained network with {
-            self.localization.get_num_samples()}  patterns"
+            self.localization.get_num_samples()}  patterns")
 
     def auto_sample(self):
         """
@@ -797,7 +800,7 @@ class App:
         self.robot.restore_state(original_state)
         self.update_map_display()
 
-        self.status_label['text'] = f"✓ Generated {total_samples} samples."
+        self.set_status(f"✓ Generated {total_samples} samples.")
 
     def start_auto_exploration(self):
         """
@@ -820,7 +823,7 @@ class App:
         if num_patterns is None:
             return
 
-        self.status_label['text'] = EXPLORING_MSG
+        self.set_status(EXPLORING_MSG)
         self.root.update()
 
         original_state = self.robot.copy_state()
@@ -843,18 +846,18 @@ class App:
             self.localization.add_sample(x, y, angle, camera_view)
 
             if i % 50 == 0:
-                self.status_label['text'] = f"⟳ Exploring... Sample {i+1}/{total_samples}"
+                self.set_status(f"⟳ Exploring... Sample {i+1}/{total_samples}")
                 self.root.update()
 
         self.update_map_display()
 
         # Train
-        self.status_label['text'] = f"⟳ Training network with {num_patterns} patterns..."
+        self.set_status(f"⟳ Training network with {num_patterns} patterns...")
         self.root.update()
 
         def train_callback(epoch, total, loss):
             if epoch % 5 == 0 or epoch == total:
-                self.status_label['text'] = f"⟳ Training... Epoch {epoch}/{total}, Loss: {loss:.4f}"
+                self.set_status(f"⟳ Training... Epoch {epoch}/{total}, Loss: {loss:.4f}")
                 self.root.update()
 
         success, loss_history = self.localization.train_sgd(
@@ -865,10 +868,10 @@ class App:
         )
 
         if success:
-            self.status_label['text'] = f"✓ Exploration complete! Learned {num_patterns} patterns from {total_samples} samples."
+            self.set_status(f"✓ Exploration complete! Learned {num_patterns} patterns from {total_samples} samples.")
             self.show_training_stats(loss_history)
         else:
-            self.status_label['text'] = TRAINING_FAILED_MSG
+            self.set_status(TRAINING_FAILED_MSG)
 
         self.robot.restore_state(original_state)
         self.update_map_display()
@@ -893,11 +896,11 @@ class App:
         Train the Modern Hopfield Network using the collected samples.
         """
         if self.localization.get_num_samples() == 0:
-            self.status_label['text'] = NO_SAMPLES_MSG
+            self.set_status(NO_SAMPLES_MSG)
             return
 
-        self.status_label['text'] = f"Training: 0/{
-            self.localization.get_num_samples()} "
+        self.set_status(f"Training: 0/{
+            self.localization.get_num_samples()} ")
 
         success = self.localization.train()
 
@@ -906,14 +909,14 @@ class App:
             self.compute_average_confidence()
 
             if self.confidence.average_confidence is not None:
-                self.status_label['text'] = f"✓ Network trained with {
+                self.set_status(f"✓ Network trained with {
                     self.localization.get_num_samples()}  patterns. Avg confidence: {
-                    self.confidence.average_confidence * 100: .1f} %"
+                    self.confidence.average_confidence * 100: .1f} %")
             else:
-                self.status_label['text'] = f"✓ Network trained with {
-                    self.localization.get_num_samples()}  patterns."
+                self.set_status(f"✓ Network trained with {
+                    self.localization.get_num_samples()}  patterns.")
         else:
-            self.status_label['text'] = TRAINING_ERROR_MSG
+            self.set_status(TRAINING_ERROR_MSG)
 
     def compute_average_confidence(self, num_tests=None):
         """
@@ -940,7 +943,7 @@ class App:
         if result:
             self.update_statistics_display()
 
-        self.status_label['text'] = ""
+        self.set_status("")
 
     def update_statistics_display(self):
         """Update the statistics display with confidence information"""
@@ -1269,7 +1272,7 @@ class App:
 
         # Update display to remove strips but keep red circle
         self.update_map_display()
-        self.status_label['text'] = "✓ Convergence trace cleared (final pattern position kept)"
+        self.set_status("✓ Convergence trace cleared (final pattern position kept)")
 
     def run(self):
         self.update_map_display()
