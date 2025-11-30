@@ -115,30 +115,37 @@ class CameraSimulator:
         Returns:
             Distance to first obstacle
         """
+        # Calculate maximum possible distance before hitting map boundary
         max_distance = self._get_distance_to_edge(x, y, dx, dy)
         step_size = RAYCAST_STEP_SIZE
         pixels = map_image.load()
 
+        # March along the ray in discrete steps
         distance = 0
         while distance < max_distance:
+            # Move one step forward along the ray direction
             distance += step_size
 
+            # Calculate current position along the ray using parametric equation: P = P0 + t * direction
             current_x = x + distance * dx
             current_y = y + distance * dy
 
-            # Fast integer conversion
+            # Convert floating-point coordinates to pixel indices
             pixel_x = int(current_x)
             pixel_y = int(current_y)
 
+            # Safety check: stop if somehow outside map bounds
             if pixel_x < 0 or pixel_x >= MAP_WIDTH or pixel_y < 0 or pixel_y >= MAP_HEIGHT:
                 return distance
 
+            # Sample the pixel color at current position
             pixel_color = pixels[pixel_x, pixel_y]
 
-            # Check for non-white color (wall)
+            # Hit detection: any non-white pixel is considered an obstacle
             if pixel_color[0] < 255 or pixel_color[1] < 255 or pixel_color[2] < 255:
                 return distance
 
+        # Ray reached map edge without hitting an obstacle
         return max_distance
 
     def _get_distance_to_edge(self, x, y, dx, dy):
