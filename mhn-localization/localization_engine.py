@@ -154,86 +154,81 @@ class LocalizationEngine:
         if camera_view is None:
             return None
 
-        try:
-            query_embedding = self._create_embedding(camera_view)
+        query_embedding = self._create_embedding(camera_view)
 
-            # Use current sample positions (which are now updated after training)
-            reference_positions = self.sample_positions
-            num_patterns = len(self.sample_embeddings)
+        # Use current sample positions
+        reference_positions = self.sample_positions
+        num_patterns = len(self.sample_embeddings)
 
-            all_indices, all_weights = self.hopfield_network.retrieve(
-                query_embedding, top_k=num_patterns)
+        all_indices, all_weights = self.hopfield_network.retrieve(
+            query_embedding, top_k=num_patterns)
 
-            self.sample_similarities = np.zeros(num_patterns)
-            for idx, weight in zip(all_indices, all_weights):
-                self.sample_similarities[idx] = weight
+        self.sample_similarities = np.zeros(num_patterns)
+        for idx, weight in zip(all_indices, all_weights):
+            self.sample_similarities[idx] = weight
 
-            # Compute energy for this query
-            energy = self.hopfield_network.get_energy(query_embedding)
+        # Compute energy for this query
+        energy = self.hopfield_network.get_energy(query_embedding)
 
-            actual_top_k = min(top_k, len(all_indices))
-            top_indices = all_indices[:actual_top_k]
-            top_weights = all_weights[:actual_top_k]
+        actual_top_k = min(top_k, len(all_indices))
+        top_indices = all_indices[:actual_top_k]
+        top_weights = all_weights[:actual_top_k]
 
-            if actual_top_k == 1:
-                best_idx = top_indices[0]
-                best_weight = top_weights[0]
-                self.last_retrieved_idx = best_idx
-                x, y, angle = reference_positions[best_idx]
-                top_k_matches = []
-            else:
-                weight_sum = np.sum(top_weights)
-                if weight_sum == 0:
-                    weight_sum = 1.0
+        if actual_top_k == 1:
+            best_idx = top_indices[0]
+            best_weight = top_weights[0]
+            self.last_retrieved_idx = best_idx
+            x, y, angle = reference_positions[best_idx]
+            top_k_matches = []
+        else:
+            weight_sum = np.sum(top_weights)
+            if weight_sum == 0:
+                weight_sum = 1.0
 
-                normalized_weights = top_weights / weight_sum
+            normalized_weights = top_weights / weight_sum
 
-                x_weighted = 0.0
-                y_weighted = 0.0
+            x_weighted = 0.0
+            y_weighted = 0.0
+            
+            # For angle averaging, we need vector components
+            sin_sum = 0.0
+            cos_sum = 0.0
+
+            top_k_matches = []
+            for idx, weight in zip(top_indices, normalized_weights):
+                pos_x, pos_y, pos_angle = reference_positions[idx]
+                x_weighted += pos_x * weight
+                y_weighted += pos_y * weight
                 
-                # For angle averaging, we need vector components
-                sin_sum = 0.0
-                cos_sum = 0.0
+                rad = np.radians(pos_angle)
+                sin_sum += np.sin(rad) * weight
+                cos_sum += np.cos(rad) * weight
+                
+                top_k_matches.append({
+                    'x': pos_x,
+                    'y': pos_y,
+                    'angle': pos_angle,
+                    'weight': float(weight),
+                    'sample_idx': int(idx)
+                })
 
-                top_k_matches = []
-                for idx, weight in zip(top_indices, normalized_weights):
-                    pos_x, pos_y, pos_angle = reference_positions[idx]
-                    x_weighted += pos_x * weight
-                    y_weighted += pos_y * weight
-                    
-                    rad = np.radians(pos_angle)
-                    sin_sum += np.sin(rad) * weight
-                    cos_sum += np.cos(rad) * weight
-                    
-                    top_k_matches.append({
-                        'x': pos_x,
-                        'y': pos_y,
-                        'angle': pos_angle,
-                        'weight': float(weight),
-                        'sample_idx': int(idx)
-                    })
+            best_idx = top_indices[0]
+            best_weight = top_weights[0]
+            self.last_retrieved_idx = best_idx
 
-                best_idx = top_indices[0]
-                best_weight = top_weights[0]
-                self.last_retrieved_idx = best_idx
+            x = x_weighted
+            y = y_weighted
+            angle = np.degrees(np.arctan2(sin_sum, cos_sum)) % 360
 
-                x = x_weighted
-                y = y_weighted
-                angle = np.degrees(np.arctan2(sin_sum, cos_sum)) % 360
-
-            return {
-                'x': x,
-                'y': y,
-                'angle': angle,
-                'confidence': float(best_weight),
-                'energy': float(energy),
-                'sample_idx': int(best_idx),
-                'top_k_matches': top_k_matches
-            }
-
-        except Exception as e:
-            print(f"Localization error: {e}")
-            return None
+        return {
+            'x': x,
+            'y': y,
+            'angle': angle,
+            'confidence': float(best_weight),
+            'energy': float(energy),
+            'sample_idx': int(best_idx),
+            'top_k_matches': top_k_matches
+        }
 
     def _encode_positions(self, positions):
         """
